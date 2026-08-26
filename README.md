@@ -4,26 +4,6 @@ A full‑featured garage inventory and work order management system designed for
 
 ---
 
-## 📌 Table of Contents
-
-- [Overview](#overview)
-- [Features](#features)
-- [Tech Stack](#tech-stack)
-- [Screenshots](#screenshots)
-- [Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Backend Setup](#backend-setup)
-  - [Frontend Setup](#frontend-setup)
-  - [Database Setup (Supabase)](#database-setup-supabase)
-- [Environment Variables](#environment-variables)
-- [Demo Accounts](#demo-accounts)
-- [Project Structure](#project-structure)
-- [Workflows](#workflows)
-- [Contributing](#contributing)
-- [License](#license)
-
----
-
 ## 📖 Overview
 
 This system replaces manual spreadsheets and paper logs with a modern web application tailored for garage operations. It supports:
