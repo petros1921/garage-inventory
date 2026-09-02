@@ -1337,6 +1337,387 @@ app.put('/api/work-orders/:id/pay', async (req, res) => {
   }
 });
 
+
+// =============================================
+// PURCHASE ORDERS API
+// =============================================
+
+// Helper: generate purchase order number
+async function generatePurchaseOrderNumber() {
+  const year = new Date().getFullYear();
+  const { count } = await supabase
+    .from('purchase_orders')
+    .select('*', { count: 'exact', head: true });
+  const seq = String((count || 0) + 1).padStart(4, '0');
+  return `PO-${year}-${seq}`;
+}
+
+// At the top, rename the client
+const supabaseClient = createClient(supabaseUrl, supabaseServiceKey);
+app.locals.supabaseClient = supabaseClient;
+
+// Then in the route, use supabaseClient directly
+app.post('/api/purchase-orders', async (req, res) => {
+  try {
+    const {
+      seller_name,
+      seller_type,
+      item_description,
+      brand,
+      model,
+      condition,
+      quantity,
+      purchase_price,
+      total_amount,
+      notes,
+      created_by
+    } = req.body;
+
+    if (!item_description || !purchase_price || !quantity || !created_by) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    const orderNumber = await generatePurchaseOrderNumber();
+
+    // ✅ Use supabaseClient (not supabase)
+    const { data: order, error } = await supabaseClient
+      .from('purchase_orders')
+      .insert([{
+        order_number: orderNumber,
+        seller_name,
+        seller_type: seller_type || 'Other',
+        item_description,
+        brand,
+        model,
+        condition: condition || 'New',
+        quantity: parseInt(quantity),
+        purchase_price: parseFloat(purchase_price),
+        total_amount: parseFloat(total_amount) || parseFloat(purchase_price) * parseInt(quantity),
+        status: 'pending_manager',
+        created_by,
+        notes
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Supabase insert error:', error);
+      throw error;
+    }
+
+    res.status(201).json({
+      success: true,
+      message: `✅ Purchase order ${orderNumber} created`,
+      order
+    });
+  } catch (error) {
+    console.error('Create purchase order error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 2. Get purchase orders (with filters)
+app.get('/api/purchase-orders', async (req, res) => {
+  try {
+    const { status, created_by, limit = 50 } = req.query;
+    let query = supabase.from('purchase_orders').select('*');
+    if (status) query = query.eq('status', status);
+    if (created_by) query = query.eq('created_by', created_by);
+    const { data, error } = await query
+      .order('created_at', { ascending: false })
+      .limit(parseInt(limit));
+    if (error) throw error;
+    res.json({ success: true, orders: data });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 3. Get single purchase order
+app.get('/api/purchase-orders/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { data, error } = await supabase
+      .from('purchase_orders')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (error) throw error;
+    res.json({ success: true, order: data });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 4. Manager approves purchase order
+app.put('/api/purchase-orders/:id/approve-manager', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { approved_by } = req.body;
+
+    // Check current order
+    const { data: order, error: getErr } = await supabase
+      .from('purchase_orders')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (getErr || !order) return res.status(404).json({ error: 'Order not found' });
+    if (order.status !== 'pending_manager') {
+      return res.status(400).json({ error: 'Order not pending manager approval' });
+    }
+
+    // Determine next status based on total amount
+    const threshold = 50000; // 50,000 ETB
+    let nextStatus = order.total_amount <= threshold ? 'pending_payment' : 'pending_manager_payment';
+
+    const { data, error } = await supabase
+      .from('purchase_orders')
+      .update({
+        status: nextStatus,
+        approved_by,
+        approved_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json({
+      success: true,
+      message: `Order approved, status: ${nextStatus}`,
+      order: data
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 5. Manager denies purchase order
+app.put('/api/purchase-orders/:id/deny-manager', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { data, error } = await supabase
+      .from('purchase_orders')
+      .update({ status: 'denied' })
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    res.json({ success: true, message: 'Order denied', order: data });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 6. Manager pays large order (>50k) – extra payment form
+app.put('/api/purchase-orders/:id/pay-manager', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { payment_method, receipt_no, paid_by } = req.body;
+
+    if (!payment_method || !receipt_no) {
+      return res.status(400).json({ error: 'Payment method and receipt number required' });
+    }
+
+    const { data, error } = await supabase
+      .from('purchase_orders')
+      .update({
+        status: 'paid',
+        payment_method,
+        receipt_no,
+        paid_by,
+        paid_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json({ success: true, message: 'Payment recorded', order: data });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 7. Cashier pays from petty cash (≤50k)
+app.put('/api/purchase-orders/:id/pay-cashier', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { paid_by } = req.body;
+
+    // Check if order is eligible
+    const { data: order, error: getErr } = await supabase
+      .from('purchase_orders')
+      .select('*')
+      .eq('id', id)
+      .single();
+    if (getErr || !order) return res.status(404).json({ error: 'Order not found' });
+    if (order.status !== 'pending_payment') {
+      return res.status(400).json({ error: 'Order not ready for cashier payment' });
+    }
+
+    // Check petty cash balance
+    const { data: alloc } = await supabase
+      .from('petty_cash_allocations')
+      .select('amount')
+      .order('week_start', { ascending: false })
+      .limit(1)
+      .single();
+
+    const currentBalance = alloc?.amount || 0;
+
+    // Calculate total deductions so far
+    const { data: transactions } = await supabase
+      .from('petty_cash_transactions')
+      .select('amount')
+      .eq('type', 'payment');
+    const totalDeducted = transactions ? transactions.reduce((s, t) => s + t.amount, 0) : 0;
+    const remaining = currentBalance - totalDeducted;
+
+    if (order.total_amount > remaining) {
+      return res.status(400).json({
+        error: `Insufficient petty cash. Available: ${remaining}, Required: ${order.total_amount}`
+      });
+    }
+
+    // Deduct from petty cash
+    const { error: txErr } = await supabase
+      .from('petty_cash_transactions')
+      .insert([{
+        purchase_order_id: id,
+        amount: order.total_amount,
+        type: 'payment',
+        created_by: paid_by
+      }]);
+
+    if (txErr) throw txErr;
+
+    // Update order status to paid
+    const { data: updated, error: updErr } = await supabase
+      .from('purchase_orders')
+      .update({
+        status: 'paid',
+        paid_by,
+        paid_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updErr) throw updErr;
+
+    res.json({ success: true, message: 'Payment successful', order: updated });
+  } catch (error) {
+    console.error('Cashier pay error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 8. Front Desk acknowledges payment
+app.put('/api/purchase-orders/:id/acknowledge-frontdesk', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { data, error } = await supabase
+      .from('purchase_orders')
+      .update({ frontdesk_acknowledged: true })
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    res.json({ success: true, order: data });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 9. Store Keeper adds item to inventory from purchase order
+app.put('/api/purchase-orders/:id/add-to-inventory', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { part_id } = req.body;
+
+    if (!part_id) return res.status(400).json({ error: 'part_id is required' });
+
+    const { data, error } = await supabase
+      .from('purchase_orders')
+      .update({
+        status: 'completed',
+        part_id,
+        storekeeper_added: true
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json({ success: true, message: 'Item added to inventory', order: data });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 10. Petty Cash: Manager sets weekly allocation
+app.post('/api/petty-cash/allocate', async (req, res) => {
+  try {
+    const { amount, week_start, week_end, created_by } = req.body;
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ error: 'Valid amount required' });
+    }
+    const start = new Date(week_start);
+    const end = new Date(week_end);
+    if (end < start) {
+      return res.status(400).json({ error: 'End date must be after start date' });
+    }
+
+    const { data, error } = await supabase
+      .from('petty_cash_allocations')
+      .insert([{ amount, week_start: start.toISOString(), week_end: end.toISOString(), created_by }])
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json({ success: true, message: 'Petty cash allocated', allocation: data });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 11. Get current petty cash balance
+app.get('/api/petty-cash/balance', async (req, res) => {
+  try {
+    // Get latest allocation
+    const { data: alloc, error: allocErr } = await supabase
+      .from('petty_cash_allocations')
+      .select('amount')
+      .order('week_start', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (allocErr && allocErr.code !== 'PGRST116') throw allocErr;
+    const totalAllocated = alloc?.amount || 0;
+
+    // Get total deductions
+    const { data: transactions, error: txErr } = await supabase
+      .from('petty_cash_transactions')
+      .select('amount')
+      .eq('type', 'payment');
+    if (txErr) throw txErr;
+    const totalDeducted = transactions ? transactions.reduce((s, t) => s + t.amount, 0) : 0;
+
+    const balance = totalAllocated - totalDeducted;
+
+    res.json({
+      success: true,
+      balance,
+      total_allocated: totalAllocated,
+      total_deducted: totalDeducted
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // =============================================
 // ROOT
 // =============================================
