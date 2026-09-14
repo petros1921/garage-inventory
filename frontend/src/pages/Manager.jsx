@@ -633,7 +633,7 @@ function Manager() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
           <Package size={24} className="text-blue-600" />
-          Manager Dashboard
+          Manager Dashboard DEPLOY TEST 123
         </h1>
         <p className="text-gray-500 text-sm">Full overview of your garage inventory & orders</p>
       </div>
