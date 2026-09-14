@@ -98,14 +98,6 @@ function Login({ setUser }) {
             <LogIn size={18} />
           </button>
         </form>
-
-        <div className="mt-6 pt-6 border-t border-gray-200 text-xs text-gray-400 text-center">
-          Demo accounts:<br />
-          manager@garage.com / manager123<br />
-          storekeeper@garage.com / store123<br />
-          frontdesk@garage.com / front123<br />
-          cashier@garage.com / cash123
-        </div>
       </div>
     </div>
   );

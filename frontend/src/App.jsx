@@ -12,9 +12,15 @@ import StoreKeeper from './pages/StoreKeeper';
 import Manager from './pages/Manager';
 import History from './pages/History';
 
-// Work Order System (NEW)
+// Work Order System
 import WorkOrders from './pages/WorkOrders';
 import WorkHistory from './pages/WorkHistory';
+
+// Purchase Order System
+import PurchaseRequests from './pages/PurchaseRequests';
+import PurchaseHistory from './pages/PurchaseHistory';
+import PurchaseToInventory from './pages/PurchaseToInventory';
+import PurchasePayments from './pages/PurchasePayments';
 
 import Navbar from './components/Navbar';
 import './index.css';
@@ -53,7 +59,7 @@ function App() {
               <Navbar user={user} setUser={setUser} />
               <div className="container mx-auto max-w-7xl px-4 py-4">
                 <Routes>
-                  {/* ===== DEFAULT REDIRECT BASED ON ROLE ===== */}
+                  {/* ===== DEFAULT REDIRECT ===== */}
                   <Route path="/" element={
                     role === 'manager' ? <Navigate to="/dashboard" /> :
                     role === 'storekeeper' ? <Navigate to="/inventory" /> :
@@ -63,47 +69,49 @@ function App() {
                   } />
 
                   {/* ===== INVENTORY SYSTEM ===== */}
-
-                  {/* Inventory - Store Keeper & Manager */}
                   <Route path="/inventory" element={
                     (role === 'manager' || role === 'storekeeper') ? <Inventory /> : <Navigate to="/" />
                   } />
-
-                  {/* Front Desk - Order Parts */}
                   <Route path="/frontdesk" element={
                     role === 'frontdesk' ? <FrontDesk /> : <Navigate to="/" />
                   } />
-
-                  {/* Cashier - Part Orders */}
                   <Route path="/cashier" element={
                     role === 'cashier' ? <Cashier /> : <Navigate to="/" />
                   } />
-
-                  {/* Store Keeper - Issue Items */}
                   <Route path="/storekeeper" element={
                     role === 'storekeeper' ? <StoreKeeper /> : <Navigate to="/" />
                   } />
-
-                  {/* Manager Dashboard */}
                   <Route path="/dashboard" element={
                     role === 'manager' ? <Manager /> : <Navigate to="/" />
                   } />
-
-                  {/* Manager Stock History */}
                   <Route path="/history" element={
                     role === 'manager' ? <History /> : <Navigate to="/" />
                   } />
 
-                  {/* ===== WORK ORDER SYSTEM (NEW) ===== */}
-
-                  {/* Front Desk - Work Orders */}
+                  {/* ===== WORK ORDER SYSTEM ===== */}
                   <Route path="/work-orders" element={
                     role === 'frontdesk' ? <WorkOrders /> : <Navigate to="/" />
                   } />
-
-                  {/* Manager - Work History */}
                   <Route path="/work-history" element={
                     role === 'manager' ? <WorkHistory /> : <Navigate to="/" />
+                  } />
+
+                  {/* ===== PURCHASE ORDER SYSTEM ===== */}
+                  {/* Front Desk - Create purchase requests */}
+                  <Route path="/purchase-requests" element={
+                    role === 'frontdesk' ? <PurchaseRequests /> : <Navigate to="/" />
+                  } />
+                  {/* Cashier - Pay purchase orders from petty cash */}
+                  <Route path="/purchase-payments" element={
+                    role === 'cashier' ? <PurchasePayments /> : <Navigate to="/" />
+                  } />
+                  {/* Store Keeper - Add purchased items to inventory */}
+                  <Route path="/purchase-to-inventory" element={
+                    role === 'storekeeper' ? <PurchaseToInventory /> : <Navigate to="/" />
+                  } />
+                  {/* Manager - View purchase history */}
+                  <Route path="/purchase-history" element={
+                    role === 'manager' ? <PurchaseHistory /> : <Navigate to="/" />
                   } />
 
                   {/* ===== CATCH-ALL ===== */}

@@ -2,7 +2,7 @@ import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Package, ClipboardList, LayoutDashboard, History, LogOut, Wrench, User,
-  Search, ShoppingCart, CheckCircle, Receipt, FileText
+  Search, ShoppingCart, CheckCircle, Receipt, FileText, PlusCircle
 } from 'lucide-react';
 import { supabase } from '../services/supabaseClient';
 
@@ -48,7 +48,7 @@ function Navbar({ user, setUser }) {
             </Link>
           )}
 
-          {/* Front Desk - Search & Request */}
+          {/* Front Desk - Order Parts & Work Orders & Purchase Requests */}
           {role === 'frontdesk' && (
             <>
               <Link to="/frontdesk" className="flex items-center gap-1 text-gray-600 hover:text-blue-600 px-2 py-2 rounded-lg hover:bg-blue-50 text-sm">
@@ -59,10 +59,14 @@ function Navbar({ user, setUser }) {
                 <Wrench size={18} />
                 <span className="hidden sm:inline">Work Orders</span>
               </Link>
+              <Link to="/purchase-requests" className="flex items-center gap-1 text-gray-600 hover:text-blue-600 px-2 py-2 rounded-lg hover:bg-blue-50 text-sm">
+                <PlusCircle size={18} />
+                <span className="hidden sm:inline">Purchase Requests</span>
+              </Link>
             </>
           )}
 
-          {/* Cashier */}
+          {/* Cashier - Part Orders, Work Payment, Purchase Payments */}
           {role === 'cashier' && (
             <>
               <Link to="/cashier" className="flex items-center gap-1 text-gray-600 hover:text-blue-600 px-2 py-2 rounded-lg hover:bg-blue-50 text-sm">
@@ -73,15 +77,25 @@ function Navbar({ user, setUser }) {
                 <Receipt size={18} />
                 <span className="hidden sm:inline">Work Payment</span>
               </Link>
+              <Link to="/purchase-payments" className="flex items-center gap-1 text-gray-600 hover:text-blue-600 px-2 py-2 rounded-lg hover:bg-blue-50 text-sm">
+                <Receipt size={18} />
+                <span className="hidden sm:inline">Purchase Payment</span>
+              </Link>
             </>
           )}
 
-          {/* Store Keeper - Issue Items */}
+          {/* Store Keeper - Issue Items & Purchase to Inventory */}
           {role === 'storekeeper' && (
-            <Link to="/storekeeper" className="flex items-center gap-1 text-gray-600 hover:text-blue-600 px-2 py-2 rounded-lg hover:bg-blue-50 text-sm">
-              <CheckCircle size={18} />
-              <span className="hidden sm:inline">Issue Items</span>
-            </Link>
+            <>
+              <Link to="/storekeeper" className="flex items-center gap-1 text-gray-600 hover:text-blue-600 px-2 py-2 rounded-lg hover:bg-blue-50 text-sm">
+                <CheckCircle size={18} />
+                <span className="hidden sm:inline">Issue Items</span>
+              </Link>
+              <Link to="/purchase-to-inventory" className="flex items-center gap-1 text-gray-600 hover:text-blue-600 px-2 py-2 rounded-lg hover:bg-blue-50 text-sm">
+                <Package size={18} />
+                <span className="hidden sm:inline">Purchase to Inv.</span>
+              </Link>
+            </>
           )}
 
           {/* Manager */}
@@ -98,6 +112,10 @@ function Navbar({ user, setUser }) {
               <Link to="/work-history" className="flex items-center gap-1 text-gray-600 hover:text-blue-600 px-2 py-2 rounded-lg hover:bg-blue-50 text-sm">
                 <FileText size={18} />
                 <span className="hidden sm:inline">Work History</span>
+              </Link>
+              <Link to="/purchase-history" className="flex items-center gap-1 text-gray-600 hover:text-blue-600 px-2 py-2 rounded-lg hover:bg-blue-50 text-sm">
+                <FileText size={18} />
+                <span className="hidden sm:inline">Purchase History</span>
               </Link>
             </>
           )}

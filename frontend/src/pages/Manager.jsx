@@ -2,14 +2,18 @@ import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Legend,
-  PieChart, Pie, Cell, ResponsiveContainer
+  PieChart, Pie, Cell, ResponsiveContainer,
+  LineChart, Line, CartesianGrid
 } from 'recharts';
 import {
   Package, AlertTriangle, Clock, CheckCircle, User,
-  DollarSign, ShoppingCart, Box, TrendingUp, X
+  DollarSign, ShoppingCart, Box, TrendingUp, X, PlusCircle,
+  TrendingDown, Wallet, Calendar
 } from 'lucide-react';
 
 function Manager() {
+  const [user, setUser] = useState(null);
+
   // --- Stats & Orders State ---
   const [stats, setStats] = useState({
     total_parts: 0,
@@ -25,8 +29,10 @@ function Manager() {
     total_orders: 0,
     completed_orders: 0
   });
-  const [pendingOrders, setPendingOrders] = useState([]);           // External buyer part orders
-  const [pendingWorkOrders, setPendingWorkOrders] = useState([]);   // Technician work orders
+  const [pendingOrders, setPendingOrders] = useState([]);
+  const [pendingWorkOrders, setPendingWorkOrders] = useState([]);
+  const [pendingPurchases, setPendingPurchases] = useState([]);
+  const [pendingManagerPayments, setPendingManagerPayments] = useState([]);
   const [completedOrders, setCompletedOrders] = useState([]);
   const [orderTrend, setOrderTrend] = useState([]);
   const [monthlySummary, setMonthlySummary] = useState({
@@ -39,32 +45,55 @@ function Manager() {
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState(null);
 
+  // --- Petty Cash State ---
+  const [pettyCashBalance, setPettyCashBalance] = useState(0);
+  const [pettyCashTotalAllocated, setPettyCashTotalAllocated] = useState(0);
+  const [pettyCashTotalDeducted, setPettyCashTotalDeducted] = useState(0);
+
+  // --- Financial Overview State ---
+  const [cashflowData, setCashflowData] = useState([]);
+  const [financialStats, setFinancialStats] = useState({
+    totalIncome: 0,
+    totalSpending: 0,
+    netProfit: 0
+  });
+
   // --- Modal States ---
   const [selectedPartOrder, setSelectedPartOrder] = useState(null);
   const [selectedWorkOrder, setSelectedWorkOrder] = useState(null);
-
-  // List modals
   const [showNewItemsModal, setShowNewItemsModal] = useState(false);
   const [showUsedItemsModal, setShowUsedItemsModal] = useState(false);
   const [newItemsList, setNewItemsList] = useState([]);
   const [usedItemsList, setUsedItemsList] = useState([]);
   const [loadingList, setLoadingList] = useState(false);
 
-  // Confirm Modal
+  // Confirm / Notification / Set Price
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [confirmMessage, setConfirmMessage] = useState('');
   const [confirmAction, setConfirmAction] = useState(null);
 
-  // Notification Modal
   const [showNotification, setShowNotification] = useState(false);
   const [notificationMessage, setNotificationMessage] = useState('');
   const [notificationType, setNotificationType] = useState('success');
 
-  // Set Price Modal
   const [showSetPriceModal, setShowSetPriceModal] = useState(false);
   const [setPricePartId, setSetPricePartId] = useState(null);
   const [setPriceItemName, setSetPriceItemName] = useState('');
   const [setPriceValue, setSetPriceValue] = useState(0);
+
+  // --- Petty Cash Modal ---
+  const [showPettyCashModal, setShowPettyCashModal] = useState(false);
+  const [pettyCashAmount, setPettyCashAmount] = useState('');
+  const [pettyCashWeekStart, setPettyCashWeekStart] = useState('');
+  const [pettyCashWeekEnd, setPettyCashWeekEnd] = useState('');
+
+  // --- Manager Payment Modal ---
+  const [showManagerPaymentModal, setShowManagerPaymentModal] = useState(false);
+  const [selectedPurchaseForPayment, setSelectedPurchaseForPayment] = useState(null);
+  const [paymentMethod, setPaymentMethod] = useState('');
+  const [otherPaymentMethod, setOtherPaymentMethod] = useState('');
+  const [receiptNumber, setReceiptNumber] = useState('');
+  const [submittingPayment, setSubmittingPayment] = useState(false);
 
   // --- Modal Functions ---
   const openConfirmModal = (message, action) => {
@@ -92,7 +121,7 @@ function Manager() {
   const openSetPriceModal = (partId, itemName, currentPrice) => {
     setSetPricePartId(partId);
     setSetPriceItemName(itemName);
-    setSetPriceValue(currentPrice !== undefined && currentPrice !== null ? currentPrice : 0);
+    setSetPriceValue(currentPrice || 0);
     setShowSetPriceModal(true);
   };
 
@@ -104,7 +133,7 @@ function Manager() {
     }
     try {
       await api.put(`/parts/${setPricePartId}/set-selling-price`, { selling_price: parseFloat(setPriceValue) });
-      openNotification('✅ Selling price updated successfully!', 'success');
+      openNotification('✅ Selling price updated!', 'success');
       setShowSetPriceModal(false);
       setSetPricePartId(null);
       fetchData();
@@ -113,14 +142,84 @@ function Manager() {
     }
   };
 
-  // --- Fetch parts by condition for modals ---
+  // --- Petty Cash ---
+  const handleSetPettyCash = async () => {
+    if (!pettyCashAmount || parseFloat(pettyCashAmount) <= 0) {
+      openNotification('Please enter a valid amount', 'error');
+      return;
+    }
+    if (!pettyCashWeekStart || !pettyCashWeekEnd) {
+      openNotification('Please select week range', 'error');
+      return;
+    }
+    try {
+      await api.post('/petty-cash/allocate', {
+        amount: parseFloat(pettyCashAmount),
+        week_start: pettyCashWeekStart,
+        week_end: pettyCashWeekEnd,
+        created_by: user?.id
+      });
+      openNotification('✅ Petty cash allocated successfully!', 'success');
+      setShowPettyCashModal(false);
+      setPettyCashAmount('');
+      setPettyCashWeekStart('');
+      setPettyCashWeekEnd('');
+      fetchData();
+    } catch (err) {
+      openNotification('❌ ' + (err.response?.data?.error || err.message), 'error');
+    }
+  };
+
+  // --- Manager Payment Modal ---
+  const handleOpenPaymentModal = (purchase) => {
+    setSelectedPurchaseForPayment(purchase);
+    setPaymentMethod('');
+    setOtherPaymentMethod('');
+    setReceiptNumber('');
+    setShowManagerPaymentModal(true);
+  };
+
+  const handleSubmitManagerPayment = async () => {
+    if (!paymentMethod) {
+      openNotification('Please select a payment method', 'error');
+      return;
+    }
+    if (paymentMethod === 'Other' && !otherPaymentMethod.trim()) {
+      openNotification('Please specify the payment method', 'error');
+      return;
+    }
+    if (!receiptNumber.trim()) {
+      openNotification('Please enter receipt number', 'error');
+      return;
+    }
+
+    setSubmittingPayment(true);
+    try {
+      const res = await api.put(`/purchase-orders/${selectedPurchaseForPayment.id}/pay-manager`, {
+        payment_method: paymentMethod === 'Other' ? otherPaymentMethod.trim() : paymentMethod,
+        receipt_no: receiptNumber.trim(),
+        paid_by: user?.id
+      });
+      if (res.data.success) {
+        openNotification('✅ Purchase order paid by manager', 'success');
+        setShowManagerPaymentModal(false);
+        setSelectedPurchaseForPayment(null);
+        fetchData();
+      }
+    } catch (err) {
+      openNotification('❌ ' + (err.response?.data?.error || err.message), 'error');
+    } finally {
+      setSubmittingPayment(false);
+    }
+  };
+
+  // --- Fetch parts by condition ---
   const fetchPartsByCondition = async (condition) => {
     setLoadingList(true);
     try {
       const res = await api.get('/parts');
       const allParts = res.data.parts || [];
-      const filtered = allParts.filter(p => p.condition === condition);
-      return filtered;
+      return allParts.filter(p => p.condition === condition);
     } catch (err) {
       console.error(err);
       openNotification('❌ Failed to load parts', 'error');
@@ -140,6 +239,20 @@ function Manager() {
     const parts = await fetchPartsByCondition('Used');
     setUsedItemsList(parts);
     setShowUsedItemsModal(true);
+  };
+
+  // --- Helper: group by month ---
+  const groupByMonth = (items, dateKey, amountKey) => {
+    const map = {};
+    items.forEach(item => {
+      const date = new Date(item[dateKey]);
+      const monthKey = date.toLocaleString('default', { month: 'short', year: 'numeric' });
+      if (!map[monthKey]) map[monthKey] = 0;
+      map[monthKey] += parseFloat(item[amountKey]) || 0;
+    });
+    // Sort by month
+    const sorted = Object.keys(map).sort((a, b) => new Date(a) - new Date(b));
+    return sorted.map(m => ({ month: m, value: map[m] }));
   };
 
   // --- Data Fetching ---
@@ -182,7 +295,7 @@ function Manager() {
         completed_orders: statsData.completed_orders || 0
       });
 
-      // 2. Pending Part Orders (external buyer)
+      // 2. Pending Part Orders
       try {
         const pendingRes = await fetchWithTimeout(api.get('/orders/status/pending_manager'));
         setPendingOrders(pendingRes.data.orders || []);
@@ -192,7 +305,7 @@ function Manager() {
         setPendingOrders([]);
       }
 
-      // 3. Pending Work Orders (technician)
+      // 3. Pending Work Orders
       try {
         const woRes = await fetchWithTimeout(api.get('/work-orders/with-parts?status=pending_manager'));
         setPendingWorkOrders(woRes.data.workOrders || []);
@@ -202,7 +315,27 @@ function Manager() {
         setPendingWorkOrders([]);
       }
 
-      // 4. Completed Part Orders (latest 20) & trend
+      // 4. Pending Purchase Orders (approval)
+      try {
+        const purchaseRes = await fetchWithTimeout(api.get('/purchase-orders?status=pending_manager'));
+        setPendingPurchases(purchaseRes.data.orders || []);
+        console.log(`✅ Pending purchase approvals: ${purchaseRes.data.orders?.length || 0}`);
+      } catch (purchaseErr) {
+        console.error('❌ Pending purchase approvals error:', purchaseErr.message);
+        setPendingPurchases([]);
+      }
+
+      // 5. Pending Manager Payments (purchase orders > 50k)
+      try {
+        const managerPayRes = await fetchWithTimeout(api.get('/purchase-orders?status=pending_manager_payment'));
+        setPendingManagerPayments(managerPayRes.data.orders || []);
+        console.log(`✅ Pending manager payments: ${managerPayRes.data.orders?.length || 0}`);
+      } catch (payErr) {
+        console.error('❌ Pending manager payments error:', payErr.message);
+        setPendingManagerPayments([]);
+      }
+
+      // 6. Completed Part Orders (for trend)
       try {
         const ordersRes = await fetchWithTimeout(api.get('/orders/all?limit=20'));
         const allOrders = ordersRes.data.orders || [];
@@ -231,7 +364,7 @@ function Manager() {
         setOrderTrend([]);
       }
 
-      // 5. Monthly Summary
+      // 7. Monthly Summary
       try {
         const summaryRes = await fetchWithTimeout(api.get('/monthly-summary'));
         setMonthlySummary(summaryRes.data.summary || { items_sold: 0, work_orders_completed: 0, work_orders_paid: 0, total_revenue: 0, avg_revenue: 0 });
@@ -239,6 +372,109 @@ function Manager() {
       } catch (summaryErr) {
         console.error('❌ Monthly summary error:', summaryErr.message);
       }
+
+      // 8. Petty Cash Balance
+      try {
+        const balanceRes = await fetchWithTimeout(api.get('/petty-cash/balance'));
+        setPettyCashBalance(balanceRes.data.balance || 0);
+        setPettyCashTotalAllocated(balanceRes.data.total_allocated || 0);
+        setPettyCashTotalDeducted(balanceRes.data.total_deducted || 0);
+        console.log('✅ Petty cash balance fetched');
+      } catch (balanceErr) {
+        console.error('❌ Petty cash balance error:', balanceErr.message);
+      }
+
+      // ===== REAL FINANCIAL DATA – FETCH ALL AND FILTER FOR PAID/COMPLETED =====
+      let allPartOrders = [];
+      let allWorkOrders = [];
+      let allPurchaseOrders = [];
+
+      // --- Part Orders (income) ---
+      try {
+        const res = await fetchWithTimeout(api.get('/orders/all?limit=1000'));
+        allPartOrders = res.data.orders || [];
+        console.log(`✅ Fetched ${allPartOrders.length} part orders`);
+      } catch (err) {
+        console.error('❌ Failed to fetch part orders for financials:', err.message);
+      }
+
+      // --- Work Orders (income) ---
+      try {
+        const res = await fetchWithTimeout(api.get('/work-orders/with-parts?limit=1000'));
+        allWorkOrders = res.data.workOrders || [];
+        console.log(`✅ Fetched ${allWorkOrders.length} work orders`);
+      } catch (err) {
+        console.error('❌ Failed to fetch work orders for financials:', err.message);
+      }
+
+      // --- Purchase Orders (spending) ---
+      try {
+        const res = await fetchWithTimeout(api.get('/purchase-orders?limit=1000'));
+        allPurchaseOrders = res.data.orders || [];
+        console.log(`✅ Fetched ${allPurchaseOrders.length} purchase orders`);
+      } catch (err) {
+        console.error('❌ Failed to fetch purchase orders for financials:', err.message);
+      }
+
+      // --- Compute Income from Part Orders ---
+      const incomeByMonth = {};
+      const paidPartOrders = allPartOrders.filter(o => o.status === 'completed' || o.status === 'paid');
+      paidPartOrders.forEach(order => {
+        const date = new Date(order.issued_at || order.created_at);
+        const monthKey = date.toLocaleString('default', { month: 'short', year: 'numeric' });
+        let total = 0;
+        if (order.order_items) {
+          order.order_items.forEach(item => {
+            total += (item.selling_price_at_time || 0) * (item.quantity || 0);
+          });
+        }
+        if (!incomeByMonth[monthKey]) incomeByMonth[monthKey] = 0;
+        incomeByMonth[monthKey] += total;
+      });
+
+      // --- Compute Income from Work Orders ---
+      const paidWorkOrders = allWorkOrders.filter(wo => wo.status === 'paid' || wo.status === 'completed');
+      paidWorkOrders.forEach(wo => {
+        const date = new Date(wo.paid_at || wo.issued_at || wo.created_at);
+        const monthKey = date.toLocaleString('default', { month: 'short', year: 'numeric' });
+        const total = parseFloat(wo.total_price) || 0;
+        if (!incomeByMonth[monthKey]) incomeByMonth[monthKey] = 0;
+        incomeByMonth[monthKey] += total;
+      });
+
+      // --- Compute Spending from Purchase Orders ---
+      const spendingByMonth = {};
+      const paidPurchaseOrders = allPurchaseOrders.filter(po => po.status === 'paid' || po.status === 'completed');
+      paidPurchaseOrders.forEach(po => {
+        const date = new Date(po.paid_at || po.updated_at || po.created_at);
+        const monthKey = date.toLocaleString('default', { month: 'short', year: 'numeric' });
+        const total = parseFloat(po.total_amount) || 0;
+        if (!spendingByMonth[monthKey]) spendingByMonth[monthKey] = 0;
+        spendingByMonth[monthKey] += total;
+      });
+
+      // Merge months
+      const allMonths = new Set([...Object.keys(incomeByMonth), ...Object.keys(spendingByMonth)]);
+      const sortedMonths = Array.from(allMonths).sort((a, b) => new Date(a) - new Date(b));
+
+      const cashflow = sortedMonths.map(month => ({
+        month,
+        income: incomeByMonth[month] || 0,
+        spending: spendingByMonth[month] || 0
+      }));
+
+      setCashflowData(cashflow);
+
+      const totalIncome = Object.values(incomeByMonth).reduce((a, b) => a + b, 0);
+      const totalSpending = Object.values(spendingByMonth).reduce((a, b) => a + b, 0);
+      setFinancialStats({
+        totalIncome,
+        totalSpending,
+        netProfit: totalIncome - totalSpending
+      });
+
+      console.log(`💰 Total Income: ${totalIncome}, Total Spending: ${totalSpending}, Net: ${totalIncome - totalSpending}`);
+      console.log('✅ Financial data computed from real data (all paid/completed orders)');
 
       console.log('✅ Dashboard data loaded');
     } catch (err) {
@@ -249,14 +485,15 @@ function Manager() {
     }
   };
 
-  // --- Handlers for Part Orders (External Buyer) ---
+  // --- Handlers ---
+  // Part Orders
   const handleApprovePartOrder = async (id) => {
-    openConfirmModal('Approve this part order? It will be sent to Store Keeper for issuance.', async () => {
+    openConfirmModal('Approve this part order?', async () => {
       setProcessingId(id);
       try {
         const res = await api.put(`/orders/${id}/approve-manager`);
         if (res.data.success) {
-          openNotification('✅ Part order approved! Sent to Store Keeper.', 'success');
+          openNotification('✅ Part order approved!', 'success');
           fetchData();
         }
       } catch (err) {
@@ -268,7 +505,7 @@ function Manager() {
   };
 
   const handleDenyPartOrder = async (id) => {
-    openConfirmModal('Deny this part order? This action cannot be undone.', async () => {
+    openConfirmModal('Deny this part order?', async () => {
       setProcessingId(id);
       try {
         const res = await api.put(`/orders/${id}/deny-manager`);
@@ -284,12 +521,12 @@ function Manager() {
     });
   };
 
-  // --- Handlers for Work Orders (Technician) ---
+  // Work Orders
   const handleApproveWorkOrder = async (id) => {
-    openConfirmModal('Approve this work order? It will be sent to Store Keeper for parts issuance.', async () => {
+    openConfirmModal('Approve this work order?', async () => {
       try {
         await api.put(`/work-orders/${id}/approve-manager`);
-        openNotification('✅ Work order approved! Sent to Store Keeper.', 'success');
+        openNotification('✅ Work order approved!', 'success');
         fetchData();
       } catch (err) {
         openNotification('❌ Error: ' + (err.response?.data?.error || err.message), 'error');
@@ -309,12 +546,57 @@ function Manager() {
     });
   };
 
+  // Purchase Orders (approve/deny)
+  const handleApprovePurchase = async (id) => {
+    openConfirmModal('Approve this purchase order?', async () => {
+      try {
+        const res = await api.put(`/purchase-orders/${id}/approve-manager`, {
+          approved_by: user?.id
+        });
+        if (res.data.success) {
+          openNotification('✅ Purchase order approved', 'success');
+          fetchData();
+        }
+      } catch (err) {
+        openNotification('❌ Error: ' + (err.response?.data?.error || err.message), 'error');
+      }
+    });
+  };
+
+  const handleDenyPurchase = async (id) => {
+    openConfirmModal('Deny this purchase order?', async () => {
+      try {
+        await api.put(`/purchase-orders/${id}/deny-manager`);
+        openNotification('❌ Purchase order denied.', 'error');
+        fetchData();
+      } catch (err) {
+        openNotification('❌ Error: ' + (err.response?.data?.error || err.message), 'error');
+      }
+    });
+  };
+
   const handleSetPriceClick = (partId, itemName, currentPrice) => {
     openSetPriceModal(partId, itemName, currentPrice);
   };
 
+  // --- Helper: status badge ---
+  const getStatusBadge = (status) => {
+    const classes = {
+      pending_cashier: 'bg-yellow-100 text-yellow-600',
+      pending_manager: 'bg-orange-100 text-orange-600',
+      pending_storekeeper: 'bg-indigo-100 text-indigo-600',
+      pending_manager_payment: 'bg-red-100 text-red-600',
+      completed: 'bg-green-100 text-green-600',
+      paid: 'bg-gray-100 text-gray-600',
+      denied: 'bg-red-100 text-red-600'
+    };
+    return classes[status] || 'bg-gray-100 text-gray-600';
+  };
+
   // --- Initial fetch ---
   useEffect(() => {
+    const u = JSON.parse(localStorage.getItem('user'));
+    setUser(u);
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -347,7 +629,7 @@ function Manager() {
   const ORDER_COLORS = ['#4CAF50', '#FF9800'];
 
   return (
-    <div className="p-4 sm:p-6">
+    <div className="p-4 sm:p-6 bg-gray-50 min-h-screen">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
           <Package size={24} className="text-blue-600" />
@@ -437,6 +719,28 @@ function Manager() {
         </div>
       </div>
 
+      {/* ===== PETTY CASH BALANCE SECTION ===== */}
+      <div className="bg-white border border-purple-200 rounded-xl shadow-sm p-4 mb-6">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <DollarSign size={24} className="text-purple-600" />
+            <span className="font-semibold text-gray-700">Petty Cash Balance:</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <span className="text-2xl font-bold text-purple-700">ETB {pettyCashBalance.toFixed(2)}</span>
+            <button
+              onClick={() => setShowPettyCashModal(true)}
+              className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-sm flex items-center gap-1"
+            >
+              <PlusCircle size={14} /> Add Funds
+            </button>
+          </div>
+        </div>
+        <div className="text-xs text-gray-400 mt-1">
+          Total Allocated: ETB {pettyCashTotalAllocated.toFixed(2)} | Total Deducted: ETB {pettyCashTotalDeducted.toFixed(2)}
+        </div>
+      </div>
+
       {/* Monthly Summary Row */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
         <div className="bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200 rounded-xl p-4 shadow-sm">
@@ -485,7 +789,77 @@ function Manager() {
         </div>
       </div>
 
-      {/* Charts Row */}
+      {/* ===== FINANCIAL OVERVIEW (REAL DATA) ===== */}
+      <div className="mb-6">
+        <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2 mb-4">
+          <Wallet className="text-emerald-600" size={22} />
+          Financial Overview (Real Data)
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+          <div className="bg-gradient-to-r from-emerald-50 to-emerald-100 border border-emerald-200 rounded-xl p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-emerald-600 font-medium">Total Income</p>
+                <p className="text-2xl font-bold text-emerald-800">${financialStats.totalIncome.toFixed(2)}</p>
+              </div>
+              <div className="bg-emerald-200 p-3 rounded-full">
+                <TrendingUp size={24} className="text-emerald-600" />
+              </div>
+            </div>
+          </div>
+          <div className="bg-gradient-to-r from-rose-50 to-rose-100 border border-rose-200 rounded-xl p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-rose-600 font-medium">Total Spending</p>
+                <p className="text-2xl font-bold text-rose-800">${financialStats.totalSpending.toFixed(2)}</p>
+              </div>
+              <div className="bg-rose-200 p-3 rounded-full">
+                <TrendingDown size={24} className="text-rose-600" />
+              </div>
+            </div>
+          </div>
+          <div className="bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200 rounded-xl p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-blue-600 font-medium">Net Profit</p>
+                <p className={`text-2xl font-bold ${financialStats.netProfit >= 0 ? 'text-blue-800' : 'text-red-600'}`}>
+                  ${financialStats.netProfit.toFixed(2)}
+                </p>
+              </div>
+              <div className="bg-blue-200 p-3 rounded-full">
+                <DollarSign size={24} className="text-blue-600" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Cashflow Chart */}
+        <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+          <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+            <Calendar size={18} className="text-gray-500" />
+            Monthly Cashflow (from completed/paid orders)
+          </h3>
+          {cashflowData.length === 0 ? (
+            <div className="flex items-center justify-center h-[220px] text-gray-400">
+              No cashflow data available yet.
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={250}>
+              <LineChart data={cashflowData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                <XAxis dataKey="month" />
+                <YAxis />
+                <Tooltip formatter={(value) => `$${value.toFixed(2)}`} />
+                <Legend />
+                <Line type="monotone" dataKey="income" stroke="#10b981" strokeWidth={2} name="Income" />
+                <Line type="monotone" dataKey="spending" stroke="#f43f5e" strokeWidth={2} name="Spending" />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+
+      {/* Charts Row (existing) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
           <h2 className="font-semibold text-gray-800 mb-3">Order Status</h2>
@@ -530,12 +904,119 @@ function Manager() {
         </div>
       </div>
 
-      {/* ===== PENDING WORK ORDERS (Technician) ===== */}
+      {/* ===== PENDING PURCHASE APPROVALS ===== */}
+      <div className="bg-white border border-blue-200 rounded-xl shadow-sm overflow-hidden mb-6">
+        <div className="px-4 py-3 border-b border-blue-200 bg-blue-50 flex justify-between items-center">
+          <h2 className="font-semibold text-blue-800 flex items-center gap-2">
+            <ShoppingCart size={18} className="text-blue-600" />
+            Pending Purchase Approvals
+          </h2>
+          <div className="flex items-center gap-3">
+            <span className="bg-blue-200 text-blue-700 px-2 py-1 rounded-full text-sm font-medium">
+              {pendingPurchases.length} pending
+            </span>
+            <button
+              onClick={() => setShowPettyCashModal(true)}
+              className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-sm flex items-center gap-1"
+            >
+              <PlusCircle size={14} /> Set Petty Cash
+            </button>
+          </div>
+        </div>
+        {pendingPurchases.length === 0 ? (
+          <div className="p-6 text-center text-gray-500">No purchase orders pending approval.</div>
+        ) : (
+          <div className="divide-y divide-gray-200 max-h-72 overflow-y-auto">
+            {pendingPurchases.map(po => (
+              <div key={po.id} className="p-4 hover:bg-gray-50 transition">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                  <div className="flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono text-sm text-blue-600 font-bold">{po.order_number}</span>
+                      <span className="text-sm font-medium text-gray-800">{po.item_description}</span>
+                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">Qty: {po.quantity}</span>
+                      <span className="text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full">Total: ETB {po.total_amount}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-3 text-sm text-gray-500 mt-1">
+                      <span>Brand: {po.brand || 'N/A'}</span>
+                      <span>Model: {po.model || 'N/A'}</span>
+                      <span>Seller: {po.seller_name || 'N/A'}</span>
+                      <span>Condition: {po.condition}</span>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleApprovePurchase(po.id)}
+                      className="bg-green-500 hover:bg-green-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => handleDenyPurchase(po.id)}
+                      className="bg-red-500 hover:bg-red-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium"
+                    >
+                      Deny
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ===== PENDING MANAGER PAYMENTS (PURCHASE > 50k) ===== */}
+      <div className="bg-white border border-red-200 rounded-xl shadow-sm overflow-hidden mb-6">
+        <div className="px-4 py-3 border-b border-red-200 bg-red-50 flex justify-between items-center">
+          <h2 className="font-semibold text-red-800 flex items-center gap-2">
+            <DollarSign size={18} className="text-red-600" />
+            Pending Manager Payments (Purchase {'>'} 50k)
+          </h2>
+          <span className="bg-red-200 text-red-700 px-2 py-1 rounded-full text-sm font-medium">
+            {pendingManagerPayments.length} pending
+          </span>
+        </div>
+        {pendingManagerPayments.length === 0 ? (
+          <div className="p-6 text-center text-gray-500">No purchase orders requiring manager payment.</div>
+        ) : (
+          <div className="divide-y divide-gray-200 max-h-72 overflow-y-auto">
+            {pendingManagerPayments.map(po => (
+              <div key={po.id} className="p-4 hover:bg-gray-50 transition">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                  <div className="flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono text-sm text-blue-600 font-bold">{po.order_number}</span>
+                      <span className="text-sm font-medium text-gray-800">{po.item_description}</span>
+                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">Qty: {po.quantity}</span>
+                      <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">Total: ETB {po.total_amount}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-3 text-sm text-gray-500 mt-1">
+                      <span>Brand: {po.brand || 'N/A'}</span>
+                      <span>Model: {po.model || 'N/A'}</span>
+                      <span>Seller: {po.seller_name || 'N/A'}</span>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleOpenPaymentModal(po)}
+                      className="bg-green-500 hover:bg-green-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium"
+                    >
+                      Pay (ETB {po.total_amount})
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ===== PENDING WORK ORDERS ===== */}
       <div className="bg-white border border-yellow-200 rounded-xl shadow-sm overflow-hidden mb-6">
         <div className="px-4 py-3 border-b border-yellow-200 bg-yellow-50 flex justify-between items-center">
           <h2 className="font-semibold text-yellow-800 flex items-center gap-2">
             <Clock size={18} className="text-yellow-600" />
-            Pending Work Orders (Technician)
+            Pending Work Orders (Manager Approval)
           </h2>
           <span className="bg-yellow-200 text-yellow-700 px-2 py-1 rounded-full text-sm font-medium">
             {pendingWorkOrders.length} pending
@@ -545,47 +1026,50 @@ function Manager() {
           <div className="p-6 text-center text-gray-500">No work orders pending approval.</div>
         ) : (
           <div className="divide-y divide-gray-200 max-h-72 overflow-y-auto">
-            {pendingWorkOrders.map(wo => (
-              <div key={wo.id} className="p-4 hover:bg-gray-50 transition">
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                  <div className="flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-mono text-sm text-blue-600 font-bold">{wo.work_order_number}</span>
-                      <span className="text-sm font-medium text-gray-800">{wo.customer_name}</span>
-                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">Tech: {wo.assigned_technician}</span>
-                      <span className="text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full">Parts: {wo.work_order_parts?.length || 0}</span>
+            {pendingWorkOrders.map(wo => {
+              const totalQty = wo.work_order_parts?.reduce((s, p) => s + p.quantity, 0) || 0;
+              const partsList = wo.work_order_parts?.map(p => `${p.part?.item_name} (${p.quantity})`).join(', ') || 'No parts';
+              return (
+                <div key={wo.id} className="p-4 hover:bg-gray-50 transition">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                    <div className="flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-sm text-blue-600 font-bold">{wo.work_order_number}</span>
+                        <span className="text-sm font-medium text-gray-800">{wo.customer_name}</span>
+                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">Tech: {wo.assigned_technician}</span>
+                      </div>
+                      <div className="flex flex-wrap gap-3 text-sm text-gray-500 mt-1">
+                        <span>Parts: <strong>{wo.work_order_parts?.length || 0}</strong></span>
+                        <span>Total Qty: <strong>{totalQty}</strong></span>
+                        <span>Total: <strong>${wo.total_price || 0}</strong></span>
+                        <span className="text-xs text-gray-400">{new Date(wo.created_at).toLocaleString()}</span>
+                      </div>
+                      <div className="text-xs text-gray-400 mt-1 truncate max-w-md">{partsList}</div>
                     </div>
-                    <div className="flex flex-wrap gap-3 text-sm text-gray-500 mt-1">
-                      <span className="text-gray-400">Part: {wo.part_received || 'N/A'}</span>
-                      <span className="text-xs text-gray-400">{new Date(wo.created_at).toLocaleString()}</span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleApproveWorkOrder(wo.id)}
+                        className="bg-green-500 hover:bg-green-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium"
+                      >
+                        Approve
+                      </button>
+                      <button
+                        onClick={() => handleDenyWorkOrder(wo.id)}
+                        className="bg-red-500 hover:bg-red-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium"
+                      >
+                        Deny
+                      </button>
+                      <button
+                        onClick={() => setSelectedWorkOrder(wo)}
+                        className="bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1.5 rounded-lg text-sm"
+                      >
+                        View
+                      </button>
                     </div>
-                    {wo.diagnosis_notes && (
-                      <div className="text-xs text-gray-400 mt-1">Diagnosis: {wo.diagnosis_notes}</div>
-                    )}
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleApproveWorkOrder(wo.id)}
-                      className="bg-green-500 hover:bg-green-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium"
-                    >
-                      Approve
-                    </button>
-                    <button
-                      onClick={() => handleDenyWorkOrder(wo.id)}
-                      className="bg-red-500 hover:bg-red-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium"
-                    >
-                      Deny
-                    </button>
-                    <button
-                      onClick={() => setSelectedWorkOrder(wo)}
-                      className="bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1.5 rounded-lg text-sm"
-                    >
-                      View
-                    </button>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -659,7 +1143,7 @@ function Manager() {
         )}
       </div>
 
-      {/* Items Without Selling Price */}
+      {/* ===== ITEMS WITHOUT SELLING PRICE ===== */}
       {noPriceItems.length > 0 && (
         <div className="bg-white border border-yellow-200 rounded-xl shadow-sm overflow-hidden mb-6">
           <div className="px-4 py-3 border-b border-yellow-200 bg-yellow-50 flex justify-between items-center">
@@ -759,19 +1243,50 @@ function Manager() {
               <p><strong>Technician:</strong> {selectedWorkOrder.assigned_technician}</p>
               <p><strong>Status:</strong> {selectedWorkOrder.status}</p>
               <p><strong>Diagnosis:</strong> {selectedWorkOrder.diagnosis_notes || '-'}</p>
-              <p><strong>Work Price:</strong> ${selectedWorkOrder.labor_charge}</p>
-              <p><strong>Part Price:</strong> ${selectedWorkOrder.total_parts_cost}</p>
-              <p><strong>Total:</strong> ${selectedWorkOrder.total_amount}</p>
-              {selectedWorkOrder.fs_number && <p><strong>FS#:</strong> {selectedWorkOrder.fs_number}</p>}
+              <p><strong>Work Price:</strong> ${selectedWorkOrder.work_price || 0}</p>
+              <p><strong>Part Price:</strong> ${selectedWorkOrder.part_price || 0}</p>
+              <p><strong>Total:</strong> ${selectedWorkOrder.total_price || 0}</p>
+              <p><strong>FS#:</strong> {selectedWorkOrder.fs_number || 'Not set'}</p>
+              <p><strong>Created At:</strong> {new Date(selectedWorkOrder.created_at).toLocaleString()}</p>
+              {selectedWorkOrder.approved_at && (
+                <p><strong>Approved At:</strong> {new Date(selectedWorkOrder.approved_at).toLocaleString()}</p>
+              )}
+              {selectedWorkOrder.issued_at && (
+                <p><strong>Issued At:</strong> {new Date(selectedWorkOrder.issued_at).toLocaleString()}</p>
+              )}
+              {selectedWorkOrder.paid_at && (
+                <p><strong>Paid At:</strong> {new Date(selectedWorkOrder.paid_at).toLocaleString()}</p>
+              )}
             </div>
-            <h3 className="font-semibold mb-2">Parts</h3>
-            <div className="space-y-1">
-              {selectedWorkOrder.work_order_parts?.map(wp => (
-                <div key={wp.id} className="flex justify-between border-b py-1 text-sm">
-                  <span>{wp.part?.item_name} ({wp.part?.item_code})</span>
-                  <span>Qty: {wp.quantity}</span>
-                </div>
-              ))}
+            <h3 className="font-semibold mt-4 mb-2">Parts Used</h3>
+            <div className="border rounded-lg p-2 max-h-40 overflow-y-auto">
+              {selectedWorkOrder.work_order_parts?.length > 0 ? (
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b">
+                    <tr>
+                      <th className="px-2 py-1 text-left">Part</th>
+                      <th className="px-2 py-1 text-left">Code</th>
+                      <th className="px-2 py-1 text-left">Quantity</th>
+                      <th className="px-2 py-1 text-left">Price</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedWorkOrder.work_order_parts.map(wp => {
+                      const price = wp.selling_price || wp.part?.selling_price || 0;
+                      return (
+                        <tr key={wp.id} className="border-b">
+                          <td className="px-2 py-1">{wp.part?.item_name || 'Unknown'}</td>
+                          <td className="px-2 py-1 font-mono text-blue-600">{wp.part?.item_code || 'N/A'}</td>
+                          <td className="px-2 py-1">{wp.quantity}</td>
+                          <td className="px-2 py-1">${price}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="text-sm text-gray-400">No parts added.</p>
+              )}
             </div>
             <button
               onClick={() => setSelectedWorkOrder(null)}
@@ -970,6 +1485,147 @@ function Manager() {
               </button>
               <button
                 onClick={() => setShowSetPriceModal(false)}
+                className="bg-gray-200 hover:bg-gray-300 px-6 py-2 rounded-lg"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== PETTY CASH MODAL ===== */}
+      {showPettyCashModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Set Petty Cash Allocation</h2>
+              <button onClick={() => setShowPettyCashModal(false)} className="text-gray-500 hover:text-gray-700">
+                <X size={24} />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium">Amount (ETB) *</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={pettyCashAmount}
+                  onChange={(e) => setPettyCashAmount(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-lg"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium">Week Start *</label>
+                <input
+                  type="date"
+                  value={pettyCashWeekStart}
+                  onChange={(e) => setPettyCashWeekStart(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-lg"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium">Week End *</label>
+                <input
+                  type="date"
+                  value={pettyCashWeekEnd}
+                  onChange={(e) => setPettyCashWeekEnd(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-lg"
+                  required
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-4 pt-4 border-t">
+              <button
+                onClick={handleSetPettyCash}
+                className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg flex-1"
+              >
+                Allocate
+              </button>
+              <button
+                onClick={() => setShowPettyCashModal(false)}
+                className="bg-gray-200 hover:bg-gray-300 px-6 py-2 rounded-lg"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== MANAGER PAYMENT MODAL ===== */}
+      {showManagerPaymentModal && selectedPurchaseForPayment && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Pay for Purchase</h2>
+              <button onClick={() => { setShowManagerPaymentModal(false); setSelectedPurchaseForPayment(null); }} className="text-gray-500 hover:text-gray-700">
+                <X size={24} />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm text-gray-500">Order</p>
+                <p className="font-semibold">{selectedPurchaseForPayment.order_number}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Item</p>
+                <p className="font-semibold">{selectedPurchaseForPayment.item_description}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Total Amount</p>
+                <p className="text-2xl font-bold text-red-600">ETB {selectedPurchaseForPayment.total_amount}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium">Payment Method *</label>
+                <select
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                >
+                  <option value="">Select payment method</option>
+                  <option value="Bank Account">Bank Account</option>
+                  <option value="Cash">Cash</option>
+                  <option value="Cheque">Cheque</option>
+                  <option value="Other">Other (specify below)</option>
+                </select>
+              </div>
+              {paymentMethod === 'Other' && (
+                <div>
+                  <label className="block text-sm font-medium">Specify Payment Method *</label>
+                  <input
+                    type="text"
+                    value={otherPaymentMethod}
+                    onChange={(e) => setOtherPaymentMethod(e.target.value)}
+                    placeholder="e.g., Mobile Money, Transfer, etc."
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium">Receipt Number *</label>
+                <input
+                  type="text"
+                  value={receiptNumber}
+                  onChange={(e) => setReceiptNumber(e.target.value)}
+                  placeholder="Enter receipt number"
+                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-4 pt-4 border-t">
+              <button
+                onClick={handleSubmitManagerPayment}
+                disabled={submittingPayment}
+                className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg flex-1 disabled:opacity-50"
+              >
+                {submittingPayment ? 'Processing...' : 'Confirm Payment'}
+              </button>
+              <button
+                onClick={() => { setShowManagerPaymentModal(false); setSelectedPurchaseForPayment(null); }}
                 className="bg-gray-200 hover:bg-gray-300 px-6 py-2 rounded-lg"
               >
                 Cancel

@@ -1,40 +1,50 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
-import { Receipt, X, Eye } from 'lucide-react';
+import { Receipt, X, Eye, DollarSign } from 'lucide-react';
 
 function Cashier() {
+  const [user, setUser] = useState(null);
   const [partOrders, setPartOrders] = useState([]);
   const [workOrders, setWorkOrders] = useState([]);
+  const [purchaseOrders, setPurchaseOrders] = useState([]);
+  const [pettyCashBalance, setPettyCashBalance] = useState(0);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(null);
-  const [user, setUser] = useState(null);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [fsNumber, setFsNumber] = useState('');
 
   useEffect(() => {
     const u = JSON.parse(localStorage.getItem('user'));
     setUser(u);
-    fetchOrders();
+    fetchData();
   }, []);
 
-  const fetchOrders = async () => {
+  const fetchData = async () => {
     try {
       setLoading(true);
-      // Part Orders pending cashier
+      // Part orders pending cashier
       const partRes = await api.get('/orders/status/pending_cashier');
       setPartOrders(partRes.data.orders || []);
 
-      // Work Orders pending payment (using the enhanced status endpoint)
+      // Work orders pending payment
       const woRes = await api.get('/work-orders/status/pending_payment');
       setWorkOrders(woRes.data.workOrders || []);
+
+      // Purchase orders pending payment (≤50k)
+      const purchaseRes = await api.get('/purchase-orders?status=pending_payment');
+      setPurchaseOrders(purchaseRes.data.orders || []);
+
+      // Petty cash balance
+      const balanceRes = await api.get('/petty-cash/balance');
+      setPettyCashBalance(balanceRes.data.balance || 0);
     } catch (err) {
-      console.error('Error fetching orders:', err);
+      console.error('Error fetching data:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  // --- Part Order Handlers ---
+  // --- Part Order Handler ---
   const handleFillCashier = async (orderId) => {
     if (!fsNumber.trim()) {
       alert('Please enter FS number');
@@ -50,7 +60,7 @@ function Cashier() {
         alert(`✅ Order ${res.data.order.order_number} sent to Manager`);
         setFsNumber('');
         setSelectedOrder(null);
-        fetchOrders();
+        fetchData();
       }
     } catch (err) {
       alert(`❌ ${err.response?.data?.error || 'Failed'}`);
@@ -72,7 +82,25 @@ function Cashier() {
       const res = await api.put(`/work-orders/${id}/pay`, { fs_number: fsNumber });
       if (res.data.success) {
         alert('✅ Work order paid successfully');
-        fetchOrders();
+        fetchData();
+      }
+    } catch (err) {
+      alert('❌ ' + (err.response?.data?.error || 'Payment failed'));
+    } finally {
+      setProcessing(null);
+    }
+  };
+
+  // --- Purchase Order Payment Handler (petty cash) ---
+  const handlePayPurchase = async (id) => {
+    setProcessing(id);
+    try {
+      const res = await api.put(`/purchase-orders/${id}/pay-cashier`, {
+        paid_by: user?.id
+      });
+      if (res.data.success) {
+        alert('✅ Purchase order paid from petty cash');
+        fetchData();
       }
     } catch (err) {
       alert('❌ ' + (err.response?.data?.error || 'Payment failed'));
@@ -86,6 +114,15 @@ function Cashier() {
   return (
     <div className="p-4 max-w-6xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">Cashier Dashboard</h1>
+
+      {/* ===== PETTY CASH BALANCE ===== */}
+      <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6 flex justify-between items-center">
+        <div className="flex items-center gap-2">
+          <DollarSign size={24} className="text-green-600" />
+          <span className="font-medium">Petty Cash Balance:</span>
+        </div>
+        <span className="text-2xl font-bold text-green-700">ETB {pettyCashBalance.toFixed(2)}</span>
+      </div>
 
       {/* ===== PART ORDERS PENDING CASHIER ===== */}
       <h2 className="text-xl font-bold mb-4 text-blue-600">Part Orders – Pending Cashier</h2>
@@ -146,9 +183,8 @@ function Cashier() {
       ) : (
         <div className="space-y-4">
           {workOrders.map(wo => {
-            const totalQty = wo.work_order_parts?.reduce((sum, p) => sum + p.quantity, 0) || 0;
             const totalParts = wo.work_order_parts?.length || 0;
-            const totalPrice = wo.total_amount || 0;
+            const totalQty = wo.work_order_parts?.reduce((sum, p) => sum + p.quantity, 0) || 0;
             return (
               <div key={wo.id} className="bg-white border border-purple-200 rounded-xl p-4 shadow-sm">
                 <div className="flex flex-wrap justify-between items-start gap-2">
@@ -159,7 +195,7 @@ function Cashier() {
                     <div><strong>Items:</strong> {totalParts} parts ({totalQty} total)</div>
                     <div><strong>Work Price:</strong> ${wo.work_price || 0}</div>
                     <div><strong>Part Price:</strong> ${wo.part_price || 0}</div>
-                    <div><strong>Total:</strong> ${totalPrice}</div>
+                    <div><strong>Total:</strong> ${wo.total_price || 0}</div>
                   </div>
                   <div className="flex flex-col gap-2">
                     <button
@@ -194,7 +230,41 @@ function Cashier() {
         </div>
       )}
 
-      {/* ===== ORDER ITEMS MODAL (for both Part and Work orders) ===== */}
+      {/* ===== PURCHASE ORDERS PENDING PAYMENT (PETTY CASH) ===== */}
+      <h2 className="text-xl font-bold mt-8 mb-4 text-orange-600">Purchase Orders – Petty Cash Payment</h2>
+      {purchaseOrders.length === 0 ? (
+        <div className="text-gray-500 text-center py-4">No purchase orders pending payment.</div>
+      ) : (
+        <div className="space-y-4">
+          {purchaseOrders.map(po => (
+            <div key={po.id} className="bg-white border border-orange-200 rounded-xl p-4 shadow-sm">
+              <div className="flex flex-wrap justify-between items-start gap-2">
+                <div>
+                  <div className="font-mono text-blue-600">{po.order_number}</div>
+                  <div><strong>Item:</strong> {po.item_description}</div>
+                  <div><strong>Seller:</strong> {po.seller_name || 'N/A'}</div>
+                  <div><strong>Condition:</strong> {po.condition}</div>
+                  <div><strong>Total:</strong> ETB {po.total_amount}</div>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={() => handlePayPurchase(po.id)}
+                    disabled={processing === po.id || pettyCashBalance < po.total_amount}
+                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-1.5 rounded text-sm flex items-center gap-1 disabled:opacity-50"
+                  >
+                    <Receipt size={16} /> Pay (ETB {po.total_amount})
+                  </button>
+                  {pettyCashBalance < po.total_amount && (
+                    <span className="text-xs text-red-500">Insufficient petty cash</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ===== ORDER ITEMS MODAL ===== */}
       {selectedOrder && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto p-6">
@@ -226,44 +296,39 @@ function Cashier() {
             <h3 className="font-semibold mb-2">Items</h3>
             <div className="space-y-2 max-h-60 overflow-y-auto">
               {selectedOrder.type === 'part' ? (
-                selectedOrder.order_items?.length > 0 ? (
-                  selectedOrder.order_items.map(item => {
-                    const part = item.parts || {};
-                    return (
-                      <div key={item.id} className="flex justify-between items-center border-b py-2">
-                        <div>
-                          <div className="font-medium">{part.item_name}</div>
-                          <div className="text-sm text-gray-500">{part.item_code}</div>
-                          <div className="text-sm text-gray-500">{part.car_brand} {part.car_model}</div>
-                        </div>
-                        <div className="text-right">
-                          <div>Qty: {item.quantity}</div>
-                          <div className="text-sm text-gray-500">${item.selling_price_at_time?.toFixed(2)}</div>
-                        </div>
+                selectedOrder.order_items?.map(item => {
+                  const part = item.parts || {};
+                  return (
+                    <div key={item.id} className="flex justify-between items-center border-b py-2">
+                      <div>
+                        <div className="font-medium">{part.item_name}</div>
+                        <div className="text-sm text-gray-500">{part.item_code}</div>
+                        <div className="text-sm text-gray-500">{part.car_brand} {part.car_model}</div>
                       </div>
-                    );
-                  })
-                ) : (
-                  <p className="text-gray-500">No items</p>
-                )
+                      <div className="text-right">
+                        <div>Qty: {item.quantity}</div>
+                        <div className="text-sm text-gray-500">${item.selling_price_at_time?.toFixed(2)}</div>
+                      </div>
+                    </div>
+                  );
+                })
               ) : (
-                selectedOrder.work_order_parts?.length > 0 ? (
-                  selectedOrder.work_order_parts.map(wp => (
+                selectedOrder.work_order_parts?.map(wp => {
+                  const price = wp.selling_price || wp.part?.selling_price || 0;
+                  return (
                     <div key={wp.id} className="flex justify-between items-center border-b py-2">
                       <div>
-                        <div className="font-medium">{wp.part_name || wp.part?.item_name || 'Unknown'}</div>
-                        <div className="text-sm text-gray-500">{wp.part_code || wp.part?.item_code || 'N/A'}</div>
-                        <div className="text-sm text-gray-500">{wp.car_brand || ''} {wp.car_model || ''}</div>
+                        <div className="font-medium">{wp.part?.item_name || 'Unknown'}</div>
+                        <div className="text-sm text-gray-500">{wp.part?.item_code || 'N/A'}</div>
+                        <div className="text-sm text-gray-500">{wp.part?.car_brand || ''} {wp.part?.car_model || ''}</div>
                       </div>
                       <div className="text-right">
                         <div>Qty: {wp.quantity}</div>
-                        <div className="text-sm text-gray-500">${wp.selling_price || 0}</div>
+                        <div className="text-sm text-gray-500">${price}</div>
                       </div>
                     </div>
-                  ))
-                ) : (
-                  <p className="text-gray-500">No items</p>
-                )
+                  );
+                })
               )}
             </div>
             <button
