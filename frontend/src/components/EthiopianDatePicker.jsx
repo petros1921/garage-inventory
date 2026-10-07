@@ -71,6 +71,7 @@ function EthiopianDatePicker({ value, onChange, label = 'Date' }) {
   const days = Array.from({ length: maxDay }, (_, i) => i + 1);
 
   const isActive = year && month && day;
+  const etFont = { fontFamily: "'Noto Sans Ethiopic', sans-serif" };
 
   return (
     <div>
@@ -82,13 +83,14 @@ function EthiopianDatePicker({ value, onChange, label = 'Date' }) {
       <div className={`flex items-center gap-1 border rounded-lg bg-white px-2 py-1.5 transition ${
         isActive ? 'border-emerald-400 ring-1 ring-emerald-200' : 'border-gray-300'
       }`}>
-        {/* Year */}
+        {/* Year — now in Amharic */}
         <select
           value={year}
           onChange={handleYear}
           className="flex-1 min-w-0 text-sm bg-transparent outline-none cursor-pointer"
+          style={etFont}
         >
-          <option value="">Year</option>
+          <option value="">አመት</option>
           {years.map(y => (
             <option key={y} value={y}>{y}</option>
           ))}
@@ -99,7 +101,7 @@ function EthiopianDatePicker({ value, onChange, label = 'Date' }) {
           value={month}
           onChange={handleMonth}
           className="flex-1 min-w-0 text-sm bg-transparent outline-none cursor-pointer"
-          style={{ fontFamily: "'Noto Sans Ethiopic', sans-serif" }}
+          style={etFont}
         >
           <option value="">ወር</option>
           {ET_MONTHS_AM.map((m, i) => (
@@ -112,6 +114,7 @@ function EthiopianDatePicker({ value, onChange, label = 'Date' }) {
           value={day}
           onChange={handleDay}
           className="w-14 text-sm bg-transparent outline-none cursor-pointer"
+          style={etFont}
         >
           <option value="">ቀን</option>
           {days.map(d => (
@@ -132,7 +135,7 @@ function EthiopianDatePicker({ value, onChange, label = 'Date' }) {
         )}
       </div>
       {isActive && (
-        <p className="text-[10px] text-emerald-600 mt-0.5" style={{ fontFamily: "'Noto Sans Ethiopic', sans-serif" }}>
+        <p className="text-[10px] text-emerald-600 mt-0.5" style={etFont}>
           ✓ {ET_MONTHS_AM[parseInt(month) - 1]} {day}, {year} ዓ.ም
         </p>
       )}
