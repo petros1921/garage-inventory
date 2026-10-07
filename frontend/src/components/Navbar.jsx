@@ -130,7 +130,7 @@ function Navbar({ user, setUser, collapsed, setCollapsed }) {
           <div className="bg-blue-600 rounded-lg p-1">
             <Wrench className="text-white" size={16} />
           </div>
-          <span className="font-bold text-gray-800 text-sm">Mekbeb Denamo</span>
+          <span className="font-bold text-gray-800 text-sm">Mekbeb Dynamo</span>
         </div>
       </div>
 
