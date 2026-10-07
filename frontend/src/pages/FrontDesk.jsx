@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
-import { Search, ShoppingCart, Plus, X, Minus, Wrench, User } from 'lucide-react';
+import { Search, ShoppingCart, Plus, X, Wrench, User, DollarSign } from 'lucide-react';
+import ImageUpload from '../components/ImageUpload';
 
 function FrontDesk() {
   const [user, setUser] = useState(null);
@@ -11,15 +12,12 @@ function FrontDesk() {
   const [showCart, setShowCart] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Customer type
   const [customerType, setCustomerType] = useState('Buyer');
 
-  // Common fields
   const [customerName, setCustomerName] = useState('');
   const [requestedBy, setRequestedBy] = useState('');
   const [notes, setNotes] = useState('');
 
-  // Work order specific fields (Technician)
   const [showWorkOrderModal, setShowWorkOrderModal] = useState(false);
   const [woCustomerName, setWoCustomerName] = useState('');
   const [woCustomerPhone, setWoCustomerPhone] = useState('');
@@ -27,6 +25,8 @@ function FrontDesk() {
   const [woCustomerPartNumber, setWoCustomerPartNumber] = useState('');
   const [woAssignedTechnician, setWoAssignedTechnician] = useState('');
   const [woDiagnosisNotes, setWoDiagnosisNotes] = useState('');
+  const [woMachineCost, setWoMachineCost] = useState(0);
+  const [woReceivedImage, setWoReceivedImage] = useState(null);
   const [woNotes, setWoNotes] = useState('');
   const [woSubmitting, setWoSubmitting] = useState(false);
 
@@ -36,7 +36,6 @@ function FrontDesk() {
     if (u?.full_name) setRequestedBy(u.full_name);
   }, []);
 
-  // Search parts (returns cards)
   const handleSearch = async (e) => {
     const term = e.target.value;
     setSearchTerm(term);
@@ -107,11 +106,12 @@ function FrontDesk() {
     setWoCustomerPartNumber('');
     setWoAssignedTechnician('');
     setWoDiagnosisNotes('');
+    setWoMachineCost(0);
+    setWoReceivedImage(null);
     setWoNotes('');
     setShowWorkOrderModal(false);
   };
 
-  // Submit External Buyer order
   const handleSubmitBuyer = async () => {
     if (!customerName.trim()) {
       alert('Please enter customer name');
@@ -146,7 +146,6 @@ function FrontDesk() {
     }
   };
 
-  // Submit Technician Work Order
   const handleSubmitWorkOrder = async () => {
     if (!woCustomerName.trim()) {
       alert('Please enter customer name');
@@ -169,6 +168,8 @@ function FrontDesk() {
         customer_part_number: woCustomerPartNumber || null,
         assigned_technician: woAssignedTechnician.trim(),
         diagnosis_notes: woDiagnosisNotes || null,
+        machine_cost: parseFloat(woMachineCost) || 0,
+        received_image_url: woReceivedImage || null,
         created_by: user?.id,
         notes: woNotes || null
       };
@@ -176,7 +177,6 @@ function FrontDesk() {
       if (res.data.success) {
         alert(`✅ Work order ${res.data.workOrder.work_order_number} created!`);
         resetWorkOrderForm();
-        // Refresh parts list if needed
       }
     } catch (err) {
       alert('❌ ' + (err.response?.data?.error || 'Creation failed'));
@@ -218,7 +218,6 @@ function FrontDesk() {
         )}
       </div>
 
-      {/* Customer Type Toggle */}
       <div className="bg-white border rounded-lg p-4 mb-4 shadow-sm">
         <div className="flex items-center gap-4">
           <span className="font-medium text-gray-700">Customer Type:</span>
@@ -254,7 +253,6 @@ function FrontDesk() {
       {/* ===== EXTERNAL BUYER ===== */}
       {customerType === 'Buyer' && (
         <>
-          {/* Search */}
           <div className="relative mb-4">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
             <input
@@ -268,7 +266,6 @@ function FrontDesk() {
 
           {loading && <div className="text-gray-500">Searching...</div>}
 
-          {/* Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {parts.map(p => (
               <div key={p.id} className="bg-white border rounded-xl p-4 shadow-sm hover:shadow-md transition">
@@ -279,7 +276,7 @@ function FrontDesk() {
                 <h3 className="font-semibold text-lg">{p.item_name}</h3>
                 <p className="text-sm text-gray-600">{p.car_brand} {p.car_model}</p>
                 <p className="text-sm">Qty: {p.quantity} | Location: {p.location || 'N/A'}</p>
-                <p className="text-sm font-medium">Price: ${p.selling_price?.toFixed(2) || 'Not set'}</p>
+                <p className="text-sm font-medium">Price: ETB {p.selling_price?.toFixed(2) || 'Not set'}</p>
                 {p.quantity > 0 && p.is_selling_price_set ? (
                   <button
                     onClick={() => addToCart(p)}
@@ -317,7 +314,7 @@ function FrontDesk() {
                         <div key={item.part_id} className="flex justify-between items-center border-b pb-2">
                           <div className="flex-1">
                             <div className="font-medium">{item.item_name}</div>
-                            <div className="text-sm text-gray-500">{item.item_code} | ${item.selling_price}</div>
+                            <div className="text-sm text-gray-500">{item.item_code} | ETB {item.selling_price}</div>
                           </div>
                           <div className="flex items-center gap-3">
                             <button onClick={() => updateQuantity(item.part_id, item.quantity - 1)} className="bg-gray-200 hover:bg-gray-300 w-6 h-6 rounded flex items-center justify-center">-</button>
@@ -330,7 +327,7 @@ function FrontDesk() {
                     </div>
                     <div className="border-t pt-3 mb-4 flex justify-between font-semibold">
                       <span>Total: {totalItems} units</span>
-                      <span>${totalPrice.toFixed(2)}</span>
+                      <span>ETB {totalPrice.toFixed(2)}</span>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                       <div>
@@ -366,8 +363,8 @@ function FrontDesk() {
 
       {/* ===== TECHNICIAN WORK ORDER MODAL ===== */}
       {customerType === 'Technician' && showWorkOrderModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 my-8">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold">New Work Order</h2>
               <button onClick={() => setShowWorkOrderModal(false)} className="text-gray-500 hover:text-gray-700">
@@ -395,10 +392,38 @@ function FrontDesk() {
                 <label className="block text-sm font-medium">Customer Part # (optional)</label>
                 <input type="text" value={woCustomerPartNumber} onChange={e => setWoCustomerPartNumber(e.target.value)} className="w-full px-3 py-2 border rounded-lg" />
               </div>
+              <div>
+                <label className="block text-sm font-medium flex items-center gap-1">
+                  <DollarSign size={14} /> Machine Cost (ETB)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={woMachineCost}
+                  onChange={e => setWoMachineCost(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-lg"
+                  placeholder="0.00"
+                />
+                <p className="text-[10px] text-gray-400 mt-0.5">
+                  Cost for using garage machines (optional)
+                </p>
+              </div>
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium">Initial Diagnosis Notes (optional)</label>
                 <textarea value={woDiagnosisNotes} onChange={e => setWoDiagnosisNotes(e.target.value)} className="w-full px-3 py-2 border rounded-lg resize-none" rows="2" />
               </div>
+
+              {/* NEW: Image upload */}
+              <div className="md:col-span-2">
+                <ImageUpload
+                  value={woReceivedImage}
+                  onChange={setWoReceivedImage}
+                  label="Photo of Part Received from Customer"
+                  folder="work-orders/received"
+                />
+              </div>
+
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium">Notes</label>
                 <textarea value={woNotes} onChange={e => setWoNotes(e.target.value)} className="w-full px-3 py-2 border rounded-lg resize-none" rows="2" />

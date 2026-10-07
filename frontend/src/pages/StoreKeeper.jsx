@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
-import { CheckCircle, Eye, X, Package, Plus } from 'lucide-react';
+import { CheckCircle, Eye, X, Package, Plus, ShoppingCart } from 'lucide-react';
 
 function StoreKeeper() {
   const [user, setUser] = useState(null);
@@ -12,7 +12,6 @@ function StoreKeeper() {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [selectedType, setSelectedType] = useState(null);
 
-  // --- State for adding part from purchase order ---
   const [showAddPartModal, setShowAddPartModal] = useState(false);
   const [selectedPurchaseOrder, setSelectedPurchaseOrder] = useState(null);
   const [addPartForm, setAddPartForm] = useState({
@@ -61,15 +60,12 @@ function StoreKeeper() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      // Work orders pending storekeeper
       const workRes = await api.get('/work-orders/with-parts?status=pending_storekeeper');
       setWorkOrders(workRes.data.workOrders || []);
 
-      // Part orders pending storekeeper
       const partRes = await api.get('/orders/status/pending_storekeeper');
       setPartOrders(partRes.data.orders || []);
 
-      // Purchase orders ready to add to inventory (paid, not yet added)
       const purchaseRes = await api.get('/purchase-orders?status=paid&storekeeper_added=false');
       setPurchaseOrders(purchaseRes.data.orders || []);
     } catch (err) {
@@ -79,7 +75,6 @@ function StoreKeeper() {
     }
   };
 
-  // --- Work Order Handlers ---
   const handleIssueWorkOrder = async (orderId) => {
     setProcessing(orderId);
     try {
@@ -97,7 +92,6 @@ function StoreKeeper() {
     }
   };
 
-  // --- Part Order Handlers ---
   const handleIssuePartOrder = async (orderId) => {
     setProcessing(orderId);
     try {
@@ -115,14 +109,13 @@ function StoreKeeper() {
     }
   };
 
-  // --- Add part from purchase order ---
   const openAddPartModal = (purchaseOrder) => {
     setSelectedPurchaseOrder(purchaseOrder);
     setAddPartForm({
       item_name: purchaseOrder.item_description || '',
       category_prefix: '',
-      car_brand: '',
-      car_model: '',
+      car_brand: purchaseOrder.brand || '',
+      car_model: purchaseOrder.model || '',
       item_type: 'Vehicle',
       condition: purchaseOrder.condition || 'New',
       quantity: purchaseOrder.quantity || 1,
@@ -143,7 +136,6 @@ function StoreKeeper() {
     if (!selectedPurchaseOrder) return;
     setSubmittingPart(true);
     try {
-      // 1. Add part to inventory
       const partPayload = {
         ...addPartForm,
         quantity: parseInt(addPartForm.quantity),
@@ -155,7 +147,6 @@ function StoreKeeper() {
 
       const newPart = partRes.data.part;
 
-      // 2. Link purchase order to the new part and mark as completed
       await api.put(`/purchase-orders/${selectedPurchaseOrder.id}/add-to-inventory`, {
         part_id: newPart.id
       });
@@ -198,10 +189,9 @@ function StoreKeeper() {
                         <span className="text-sm bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">Ready to Issue</span>
                       </div>
                       <div className="text-sm mt-1">
-                        <p><strong>Customer:</strong> {order.customer_name} (Technician)</p>
-                        <p><strong>FS#:</strong> {order.fs_number || 'Not set'}</p>
-                        <p><strong>Items:</strong> {totalParts} parts ({totalQty} total units)</p>
+                        <p><strong>Customer:</strong> {order.customer_name}</p>
                         <p><strong>Technician:</strong> {order.assigned_technician}</p>
+                        <p><strong>Items:</strong> {totalParts} parts ({totalQty} total units)</p>
                       </div>
                     </div>
                     <div className="flex gap-2">
@@ -230,7 +220,7 @@ function StoreKeeper() {
       {/* ===== PART ORDERS ===== */}
       <div className="mb-6">
         <h2 className="text-lg font-semibold text-green-700 mb-3 flex items-center gap-2">
-          <Package size={20} /> Part Orders to Issue ({partOrders.length})
+          <ShoppingCart size={20} /> Part Orders to Issue ({partOrders.length})
         </h2>
         {partOrders.length === 0 ? (
           <div className="text-gray-500 text-center py-4 bg-gray-50 rounded-lg">No part orders to issue.</div>
@@ -249,7 +239,7 @@ function StoreKeeper() {
                       </div>
                       <div className="text-sm mt-1">
                         <p><strong>Customer:</strong> {order.customer_name} ({order.customer_type})</p>
-                        <p><strong>FS#:</strong> {order.fs_number}</p>
+                        <p><strong>FS#:</strong> {order.fs_number || 'Not set'}</p>
                         <p><strong>Items:</strong> {totalParts} parts ({totalQty} total units)</p>
                       </div>
                     </div>
@@ -315,7 +305,7 @@ function StoreKeeper() {
         )}
       </div>
 
-      {/* ===== DETAIL MODAL (for work & part orders) ===== */}
+      {/* ===== DETAIL MODAL ===== */}
       {selectedOrder && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto p-6">
@@ -327,8 +317,47 @@ function StoreKeeper() {
                 <X size={24} />
               </button>
             </div>
-            {/* ... existing detail view ... */}
-            <button onClick={() => setSelectedOrder(null)} className="mt-4 bg-gray-200 hover:bg-gray-300 px-6 py-2 rounded-lg w-full">
+            <p className="text-sm mb-3"><strong>Customer:</strong> {selectedOrder.customer_name}</p>
+            {selectedType === 'work' && (
+              <p className="text-sm mb-3"><strong>Technician:</strong> {selectedOrder.assigned_technician}</p>
+            )}
+            <h3 className="font-semibold mb-2 text-sm">Items to Issue</h3>
+            <div className="space-y-1 border rounded-lg p-3 max-h-96 overflow-y-auto">
+              {selectedType === 'work' ? (
+                selectedOrder.work_order_parts?.length > 0 ? (
+                  selectedOrder.work_order_parts.map(wp => (
+                    <div key={wp.id} className="flex justify-between border-b py-2 text-sm">
+                      <div>
+                        <div className="font-medium">{wp.part?.item_name}</div>
+                        <div className="text-xs text-gray-500">{wp.part?.item_code}</div>
+                      </div>
+                      <div className="text-right">
+                        <div>Qty: <strong>{wp.quantity}</strong></div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-gray-400">No parts.</p>
+                )
+              ) : (
+                selectedOrder.order_items?.length > 0 ? (
+                  selectedOrder.order_items.map(item => (
+                    <div key={item.id} className="flex justify-between border-b py-2 text-sm">
+                      <div>
+                        <div className="font-medium">{item.parts?.item_name}</div>
+                        <div className="text-xs text-gray-500">{item.parts?.item_code}</div>
+                      </div>
+                      <div className="text-right">
+                        <div>Qty: <strong>{item.quantity}</strong></div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-gray-400">No items.</p>
+                )
+              )}
+            </div>
+            <button onClick={() => { setSelectedOrder(null); setSelectedType(null); }} className="mt-4 bg-gray-200 hover:bg-gray-300 px-6 py-2 rounded-lg w-full">
               Close
             </button>
           </div>
@@ -350,22 +379,15 @@ function StoreKeeper() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium">Item Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={addPartForm.item_name}
+                  <input type="text" required value={addPartForm.item_name}
                     onChange={(e) => setAddPartForm({ ...addPartForm, item_name: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg"
-                  />
+                    className="w-full px-3 py-2 border rounded-lg" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium">Category *</label>
-                  <select
-                    required
-                    value={addPartForm.category_prefix}
+                  <select required value={addPartForm.category_prefix}
                     onChange={(e) => setAddPartForm({ ...addPartForm, category_prefix: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg"
-                  >
+                    className="w-full px-3 py-2 border rounded-lg">
                     <option value="">Select category</option>
                     {categories.map(c => (
                       <option key={c.id} value={c.prefix}>{c.name} ({c.prefix})</option>
@@ -374,29 +396,21 @@ function StoreKeeper() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium">Brand</label>
-                  <input
-                    type="text"
-                    value={addPartForm.car_brand}
+                  <input type="text" value={addPartForm.car_brand}
                     onChange={(e) => setAddPartForm({ ...addPartForm, car_brand: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg"
-                  />
+                    className="w-full px-3 py-2 border rounded-lg" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium">Model</label>
-                  <input
-                    type="text"
-                    value={addPartForm.car_model}
+                  <input type="text" value={addPartForm.car_model}
                     onChange={(e) => setAddPartForm({ ...addPartForm, car_model: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg"
-                  />
+                    className="w-full px-3 py-2 border rounded-lg" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium">Item Type</label>
-                  <select
-                    value={addPartForm.item_type}
+                  <select value={addPartForm.item_type}
                     onChange={(e) => setAddPartForm({ ...addPartForm, item_type: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg"
-                  >
+                    className="w-full px-3 py-2 border rounded-lg">
                     <option value="Vehicle">Vehicle</option>
                     <option value="Machinery">Machinery</option>
                     <option value="Other">Other</option>
@@ -404,119 +418,79 @@ function StoreKeeper() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium">Condition</label>
-                  <select
-                    value={addPartForm.condition}
+                  <select value={addPartForm.condition}
                     onChange={(e) => setAddPartForm({ ...addPartForm, condition: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg"
-                  >
+                    className="w-full px-3 py-2 border rounded-lg">
                     <option value="New">New</option>
                     <option value="Used">Used</option>
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium">Quantity *</label>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    value={addPartForm.quantity}
+                  <input type="number" min="1" required value={addPartForm.quantity}
                     onChange={(e) => setAddPartForm({ ...addPartForm, quantity: parseInt(e.target.value) || 1 })}
-                    className="w-full px-3 py-2 border rounded-lg"
-                  />
+                    className="w-full px-3 py-2 border rounded-lg" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium">Min Stock</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={addPartForm.min_stock}
+                  <input type="number" min="0" value={addPartForm.min_stock}
                     onChange={(e) => setAddPartForm({ ...addPartForm, min_stock: parseInt(e.target.value) || 5 })}
-                    className="w-full px-3 py-2 border rounded-lg"
-                  />
+                    className="w-full px-3 py-2 border rounded-lg" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium">Purchase Price (ETB)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={addPartForm.purchase_price}
+                  <input type="number" min="0" step="0.01" value={addPartForm.purchase_price}
                     onChange={(e) => setAddPartForm({ ...addPartForm, purchase_price: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border rounded-lg"
-                  />
+                    className="w-full px-3 py-2 border rounded-lg" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium">Selling Price (ETB)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={addPartForm.selling_price}
+                  <input type="number" min="0" step="0.01" value={addPartForm.selling_price}
                     onChange={(e) => setAddPartForm({ ...addPartForm, selling_price: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border rounded-lg"
-                  />
+                    className="w-full px-3 py-2 border rounded-lg" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium">Row</label>
-                  <input
-                    type="text"
-                    value={addPartForm.row_number}
+                  <input type="text" value={addPartForm.row_number}
                     onChange={(e) => setAddPartForm({ ...addPartForm, row_number: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg"
-                  />
+                    className="w-full px-3 py-2 border rounded-lg" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium">Shelf</label>
-                  <input
-                    type="text"
-                    value={addPartForm.shelf_number}
+                  <input type="text" value={addPartForm.shelf_number}
                     onChange={(e) => setAddPartForm({ ...addPartForm, shelf_number: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg"
-                  />
+                    className="w-full px-3 py-2 border rounded-lg" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium">Bin</label>
-                  <input
-                    type="text"
-                    value={addPartForm.bin_number}
+                  <input type="text" value={addPartForm.bin_number}
                     onChange={(e) => setAddPartForm({ ...addPartForm, bin_number: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg"
-                  />
+                    className="w-full px-3 py-2 border rounded-lg" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium">Supplier Name</label>
-                  <input
-                    type="text"
-                    value={addPartForm.supplier_name}
+                  <input type="text" value={addPartForm.supplier_name}
                     onChange={(e) => setAddPartForm({ ...addPartForm, supplier_name: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg"
-                  />
+                    className="w-full px-3 py-2 border rounded-lg" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium">Supplier Type</label>
-                  <select
-                    value={addPartForm.supplier_type}
+                  <select value={addPartForm.supplier_type}
                     onChange={(e) => setAddPartForm({ ...addPartForm, supplier_type: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg"
-                  >
+                    className="w-full px-3 py-2 border rounded-lg">
                     <option value="Spare Part Shop">Spare Part Shop</option>
                     <option value="Individual">Individual</option>
                   </select>
                 </div>
               </div>
               <div className="flex gap-3 mt-4 pt-4 border-t">
-                <button
-                  type="submit"
-                  disabled={submittingPart}
-                  className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-2 rounded-lg flex-1 disabled:opacity-50"
-                >
+                <button type="submit" disabled={submittingPart}
+                  className="bg-orange-600 hover:bg-orange-700 text-white px-6 py-2 rounded-lg flex-1 disabled:opacity-50">
                   {submittingPart ? 'Adding...' : 'Add to Inventory'}
                 </button>
-                <button
-                  type="button"
+                <button type="button"
                   onClick={() => { setShowAddPartModal(false); setSelectedPurchaseOrder(null); }}
-                  className="bg-gray-200 hover:bg-gray-300 px-6 py-2 rounded-lg"
-                >
+                  className="bg-gray-200 hover:bg-gray-300 px-6 py-2 rounded-lg">
                   Cancel
                 </button>
               </div>

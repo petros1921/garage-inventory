@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
-import { Search, Plus, AlertCircle, Edit, X, Trash2 } from 'lucide-react';
+import { Search, Plus, Edit, X, Trash2, Package, AlertTriangle, CheckCircle } from 'lucide-react';
 
 function Inventory() {
   const [parts, setParts] = useState([]);
@@ -15,7 +15,6 @@ function Inventory() {
   const [restockQuantity, setRestockQuantity] = useState(1);
   const [restocking, setRestocking] = useState(false);
 
-  // --- Edit Modal ---
   const [showEditModal, setShowEditModal] = useState(false);
   const [editPart, setEditPart] = useState(null);
   const [editFormData, setEditFormData] = useState({
@@ -27,12 +26,10 @@ function Inventory() {
   });
   const [editing, setEditing] = useState(false);
 
-  // --- Delete Modal ---
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletePartId, setDeletePartId] = useState(null);
   const [deletePartName, setDeletePartName] = useState('');
 
-  // --- Modal States for Notifications etc. ---
   const [showNotification, setShowNotification] = useState(false);
   const [notificationMessage, setNotificationMessage] = useState('');
   const [notificationType, setNotificationType] = useState('success');
@@ -87,7 +84,6 @@ function Inventory() {
     } catch (err) { console.error(err); }
   };
 
-  // --- Modal Functions ---
   const openNotification = (message, type = 'success') => {
     setNotificationMessage(message);
     setNotificationType(type);
@@ -119,7 +115,6 @@ function Inventory() {
     }
   };
 
-  // --- Handlers ---
   const handleSearch = async (e) => {
     const term = e.target.value;
     setSearchTerm(term);
@@ -153,9 +148,9 @@ function Inventory() {
   };
 
   const getStockStatus = (qty, min) => {
-    if (qty === 0) return { label: 'Out of Stock', color: 'text-red-600 bg-red-100' };
-    if (qty <= min) return { label: 'Low Stock', color: 'text-yellow-600 bg-yellow-100' };
-    return { label: 'In Stock', color: 'text-green-600 bg-green-100' };
+    if (qty === 0) return { label: 'Out of Stock', color: 'bg-red-100 text-red-700', icon: AlertTriangle };
+    if (qty <= min) return { label: 'Low Stock', color: 'bg-yellow-100 text-yellow-700', icon: AlertTriangle };
+    return { label: 'In Stock', color: 'bg-green-100 text-green-700', icon: CheckCircle };
   };
 
   const handleRestock = async () => {
@@ -184,7 +179,6 @@ function Inventory() {
     openSetPriceModal(partId, itemName, currentPrice);
   };
 
-  // --- Edit Handlers ---
   const openEditModal = (part) => {
     setEditPart(part);
     setEditFormData({
@@ -241,7 +235,6 @@ function Inventory() {
     }
   };
 
-  // --- Delete Handlers ---
   const openDeleteModal = (partId, partName) => {
     setDeletePartId(partId);
     setDeletePartName(partName);
@@ -262,7 +255,6 @@ function Inventory() {
     }
   };
 
-  // --- Render helpers ---
   const isManager = user?.role === 'manager';
   const isStoreKeeper = user?.role === 'storekeeper';
 
@@ -279,11 +271,17 @@ function Inventory() {
     <div className="p-4">
       <div className="flex justify-between items-center mb-4">
         <div>
-          <h1 className="text-2xl font-bold">Inventory</h1>
-          <p className="text-gray-500">{parts.length} parts</p>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <Package size={24} className="text-blue-600" />
+            Inventory
+          </h1>
+          <p className="text-gray-500 text-sm">{parts.length} parts</p>
         </div>
         {(isManager || isStoreKeeper) && (
-          <button onClick={() => setShowModal(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2">
+          <button
+            onClick={() => setShowModal(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 font-medium"
+          >
             <Plus size={18} /> Add Part
           </button>
         )}
@@ -293,31 +291,31 @@ function Inventory() {
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
         <input
           type="text"
-          placeholder="Search..."
+          placeholder="Search by name, code, brand, model..."
           value={searchTerm}
           onChange={handleSearch}
           className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
         />
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm overflow-x-auto">
+      <div className="bg-white rounded-xl shadow-sm overflow-x-auto border border-gray-200">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b">
             <tr>
-              <th className="px-4 py-3 text-left">Code</th>
-              <th className="px-4 py-3 text-left">Item</th>
-              <th className="px-4 py-3 text-left hidden md:table-cell">Brand</th>
-              <th className="px-4 py-3 text-left hidden lg:table-cell">Model</th>
-              <th className="px-4 py-3 text-left">Condition</th>
-              <th className="px-4 py-3 text-left">Qty</th>
-              <th className="px-4 py-3 text-left hidden sm:table-cell">Location</th>
-              <th className="px-4 py-3 text-left">Status</th>
-              <th className="px-4 py-3 text-left">Purchase</th>
-              <th className="px-4 py-3 text-left">Sell</th>
-              {(isManager || isStoreKeeper) && <th className="px-4 py-3 text-left">Action</th>}
+              <th className="px-4 py-3 text-left font-semibold text-gray-700">Code</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700">Item</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700 hidden md:table-cell">Brand</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700 hidden lg:table-cell">Model</th>
+              <th className="px-4 py-3 text-center font-semibold text-gray-700">Condition</th>
+              <th className="px-4 py-3 text-center font-semibold text-gray-700">Qty</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700 hidden sm:table-cell">Location</th>
+              <th className="px-4 py-3 text-center font-semibold text-gray-700">Status</th>
+              <th className="px-4 py-3 text-right font-semibold text-gray-700">Purchase</th>
+              <th className="px-4 py-3 text-right font-semibold text-gray-700">Sell</th>
+              {(isManager || isStoreKeeper) && <th className="px-4 py-3 text-center font-semibold text-gray-700">Action</th>}
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-gray-100">
             {filtered.map(p => {
               const status = getStockStatus(p.quantity, p.min_stock);
               return (
@@ -329,58 +327,65 @@ function Inventory() {
                   </td>
                   <td className="px-4 py-2 hidden md:table-cell">{p.car_brand || '-'}</td>
                   <td className="px-4 py-2 hidden lg:table-cell">{p.car_model || '-'}</td>
-                  <td className="px-4 py-2">
+                  <td className="px-4 py-2 text-center">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                       p.condition === 'New' ? 'bg-green-100 text-green-600' : 'bg-yellow-100 text-yellow-600'
                     }`}>
                       {p.condition || 'N/A'}
                     </span>
                   </td>
-                  <td className="px-4 py-2 font-bold">{p.quantity}</td>
-                  <td className="px-4 py-2 hidden sm:table-cell">{p.location || '-'}</td>
-                  <td className="px-4 py-2">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${status.color}`}>
+                  <td className="px-4 py-2 font-bold text-center">{p.quantity}</td>
+                  <td className="px-4 py-2 hidden sm:table-cell font-mono text-xs">{p.location || '-'}</td>
+                  <td className="px-4 py-2 text-center">
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium whitespace-nowrap ${status.color}`}>
                       {status.label}
                     </span>
                   </td>
-                  <td className="px-4 py-2">${p.purchase_price?.toFixed(2)}</td>
-                  <td className="px-4 py-2">
-                    {p.is_selling_price_set ? `$${p.selling_price?.toFixed(2)}` : 'Not set'}
+                  <td className="px-4 py-2 text-right whitespace-nowrap">ETB {p.purchase_price?.toFixed(2)}</td>
+                  <td className="px-4 py-2 text-right whitespace-nowrap">
+                    {p.is_selling_price_set ? (
+                      <span className="font-medium text-emerald-700">ETB {p.selling_price?.toFixed(2)}</span>
+                    ) : (
+                      <span className="text-xs text-gray-400">Not set</span>
+                    )}
                   </td>
                   {(isManager || isStoreKeeper) && (
                     <td className="px-4 py-2">
-                      {/* Store Keeper: Restock */}
-                      {isStoreKeeper && (
-                        <button
-                          onClick={() => { setRestockPart(p); setShowRestockModal(true); }}
-                          className="bg-green-500 text-white text-xs px-2 py-1 rounded mr-1"
-                        >
-                          Restock
-                        </button>
-                      )}
-                      {/* Manager: Edit, Delete, Set Price */}
-                      {isManager && (
-                        <>
+                      <div className="flex items-center justify-center gap-1">
+                        {isStoreKeeper && (
                           <button
-                            onClick={() => openEditModal(p)}
-                            className="bg-blue-500 text-white text-xs px-2 py-1 rounded mr-1"
+                            onClick={() => { setRestockPart(p); setShowRestockModal(true); }}
+                            className="bg-green-500 hover:bg-green-600 text-white text-xs px-2 py-1 rounded font-medium"
+                            title="Restock"
                           >
-                            <Edit size={12} />
+                            Restock
                           </button>
-                          <button
-                            onClick={() => openDeleteModal(p.id, p.item_name)}
-                            className="bg-red-500 text-white text-xs px-2 py-1 rounded mr-1"
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                          <button
-                            onClick={() => handleSetPriceClick(p.id, p.item_name, p.selling_price)}
-                            className="bg-purple-500 text-white text-xs px-2 py-1 rounded"
-                          >
-                            {p.is_selling_price_set ? 'Edit Price' : 'Set Price'}
-                          </button>
-                        </>
-                      )}
+                        )}
+                        {isManager && (
+                          <>
+                            <button
+                              onClick={() => openEditModal(p)}
+                              className="bg-blue-500 hover:bg-blue-600 text-white p-1.5 rounded"
+                              title="Edit"
+                            >
+                              <Edit size={12} />
+                            </button>
+                            <button
+                              onClick={() => openDeleteModal(p.id, p.item_name)}
+                              className="bg-red-500 hover:bg-red-600 text-white p-1.5 rounded"
+                              title="Delete"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                            <button
+                              onClick={() => handleSetPriceClick(p.id, p.item_name, p.selling_price)}
+                              className="bg-purple-500 hover:bg-purple-600 text-white text-xs px-2 py-1 rounded font-medium whitespace-nowrap"
+                            >
+                              {p.is_selling_price_set ? 'Edit Price' : 'Set Price'}
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </td>
                   )}
                 </tr>
@@ -390,7 +395,7 @@ function Inventory() {
         </table>
       </div>
 
-      {/* ========== ADD PART MODAL ========== */}
+      {/* ADD PART MODAL */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
@@ -402,7 +407,6 @@ function Inventory() {
             </div>
             <form onSubmit={handleAddPart}>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Same as before */}
                 <div>
                   <label className="block text-sm font-medium">Item Name *</label>
                   <input type="text" required value={formData.item_name} onChange={e => setFormData({...formData, item_name: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
@@ -431,7 +435,7 @@ function Inventory() {
                   <input type="number" min="0" value={formData.min_stock} onChange={e => setFormData({...formData, min_stock: parseInt(e.target.value)||5})} className="w-full px-3 py-2 border rounded-lg" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium">Purchase Price ($)</label>
+                  <label className="block text-sm font-medium">Purchase Price (ETB)</label>
                   <input type="number" min="0" step="0.01" value={formData.purchase_price} onChange={e => setFormData({...formData, purchase_price: parseFloat(e.target.value)||0})} className="w-full px-3 py-2 border rounded-lg" />
                 </div>
                 <div>
@@ -466,15 +470,15 @@ function Inventory() {
                 </div>
               </div>
               <div className="flex gap-3 mt-6 pt-4 border-t">
-                <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded-lg flex-1">Add Part</button>
-                <button type="button" onClick={() => setShowModal(false)} className="bg-gray-200 px-6 py-2 rounded-lg">Cancel</button>
+                <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg flex-1 font-medium">Add Part</button>
+                <button type="button" onClick={() => setShowModal(false)} className="bg-gray-200 hover:bg-gray-300 px-6 py-2 rounded-lg">Cancel</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* ========== EDIT MODAL ========== */}
+      {/* EDIT MODAL */}
       {showEditModal && editPart && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
@@ -514,11 +518,11 @@ function Inventory() {
                   <input type="number" min="0" value={editFormData.min_stock} onChange={e => setEditFormData({...editFormData, min_stock: parseInt(e.target.value)||5})} className="w-full px-3 py-2 border rounded-lg" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium">Purchase Price ($)</label>
+                  <label className="block text-sm font-medium">Purchase Price (ETB)</label>
                   <input type="number" min="0" step="0.01" value={editFormData.purchase_price} onChange={e => setEditFormData({...editFormData, purchase_price: parseFloat(e.target.value)||0})} className="w-full px-3 py-2 border rounded-lg" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium">Selling Price ($)</label>
+                  <label className="block text-sm font-medium">Selling Price (ETB)</label>
                   <input type="number" min="0" step="0.01" value={editFormData.selling_price} onChange={e => setEditFormData({...editFormData, selling_price: parseFloat(e.target.value)||0})} className="w-full px-3 py-2 border rounded-lg" />
                 </div>
                 <div>
@@ -561,17 +565,17 @@ function Inventory() {
                 </div>
               </div>
               <div className="flex gap-3 mt-6 pt-4 border-t">
-                <button type="submit" disabled={editing} className="bg-blue-600 text-white px-6 py-2 rounded-lg flex-1">
+                <button type="submit" disabled={editing} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg flex-1 font-medium disabled:opacity-50">
                   {editing ? 'Saving...' : 'Save Changes'}
                 </button>
-                <button type="button" onClick={() => { setShowEditModal(false); setEditPart(null); }} className="bg-gray-200 px-6 py-2 rounded-lg">Cancel</button>
+                <button type="button" onClick={() => { setShowEditModal(false); setEditPart(null); }} className="bg-gray-200 hover:bg-gray-300 px-6 py-2 rounded-lg">Cancel</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* ========== DELETE CONFIRM MODAL ========== */}
+      {/* DELETE MODAL */}
       {showDeleteModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-sm w-full p-6">
@@ -585,24 +589,14 @@ function Inventory() {
               Are you sure you want to delete <strong>"{deletePartName}"</strong>? This action cannot be undone.
             </p>
             <div className="flex gap-3 mt-4 pt-4 border-t">
-              <button
-                onClick={handleDeleteConfirm}
-                className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg flex-1"
-              >
-                Yes, Delete
-              </button>
-              <button
-                onClick={() => { setShowDeleteModal(false); setDeletePartId(null); }}
-                className="bg-gray-200 hover:bg-gray-300 px-6 py-2 rounded-lg"
-              >
-                Cancel
-              </button>
+              <button onClick={handleDeleteConfirm} className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg flex-1 font-medium">Yes, Delete</button>
+              <button onClick={() => { setShowDeleteModal(false); setDeletePartId(null); }} className="bg-gray-200 hover:bg-gray-300 px-6 py-2 rounded-lg">Cancel</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ========== RESTOCK MODAL ========== */}
+      {/* RESTOCK MODAL */}
       {showRestockModal && restockPart && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-md w-full p-6">
@@ -628,25 +622,16 @@ function Inventory() {
               </p>
             </div>
             <div className="flex gap-3 mt-4 pt-4 border-t">
-              <button
-                onClick={handleRestock}
-                disabled={restocking}
-                className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg flex-1 disabled:opacity-50"
-              >
+              <button onClick={handleRestock} disabled={restocking} className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg flex-1 font-medium disabled:opacity-50">
                 {restocking ? 'Restocking...' : 'Confirm Restock'}
               </button>
-              <button
-                onClick={() => { setShowRestockModal(false); setRestockPart(null); setRestockQuantity(1); }}
-                className="bg-gray-200 hover:bg-gray-300 px-6 py-2 rounded-lg"
-              >
-                Cancel
-              </button>
+              <button onClick={() => { setShowRestockModal(false); setRestockPart(null); setRestockQuantity(1); }} className="bg-gray-200 hover:bg-gray-300 px-6 py-2 rounded-lg">Cancel</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ========== SET PRICE MODAL ========== */}
+      {/* SET PRICE MODAL */}
       {showSetPriceModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-md w-full p-6">
@@ -659,7 +644,7 @@ function Inventory() {
             <p className="text-gray-600 mb-2">Set the selling price for:</p>
             <p className="font-semibold text-lg">{setPriceItemName}</p>
             <div className="mt-4">
-              <label className="block text-sm font-medium text-gray-700">Price ($)</label>
+              <label className="block text-sm font-medium text-gray-700">Price (ETB)</label>
               <input
                 type="number"
                 min="0"
@@ -671,46 +656,31 @@ function Inventory() {
               />
             </div>
             <div className="flex gap-3 mt-4 pt-4 border-t">
-              <button
-                onClick={handleSetPriceSubmit}
-                className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg flex-1"
-              >
-                Save Price
-              </button>
-              <button
-                onClick={() => setShowSetPriceModal(false)}
-                className="bg-gray-200 hover:bg-gray-300 px-6 py-2 rounded-lg"
-              >
-                Cancel
-              </button>
+              <button onClick={handleSetPriceSubmit} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg flex-1 font-medium">Save Price</button>
+              <button onClick={() => setShowSetPriceModal(false)} className="bg-gray-200 hover:bg-gray-300 px-6 py-2 rounded-lg">Cancel</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ========== ADD PART SUCCESS ========== */}
+      {/* ADD PART SUCCESS */}
       {showAddPartSuccess && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-sm w-full p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold text-green-600">✅ Part Added!</h2>
-              <button onClick={() => setShowAddPartSuccess(false)} className="text-gray-500 hover:text-gray-700">
-                <X size={24} />
-              </button>
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 text-center">
+            <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-3">
+              <CheckCircle className="text-green-600" size={28} />
             </div>
+            <h2 className="text-lg font-bold text-green-700 mb-2">Part Added!</h2>
             <p className="text-gray-700">Part code: <span className="font-mono text-blue-600 font-bold">{addPartCode}</span></p>
             <p className="text-sm text-gray-500 mt-1">The part has been added to your inventory.</p>
-            <button
-              onClick={() => setShowAddPartSuccess(false)}
-              className="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg"
-            >
+            <button onClick={() => setShowAddPartSuccess(false)} className="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium">
               OK
             </button>
           </div>
         </div>
       )}
 
-      {/* ========== NOTIFICATION MODAL ========== */}
+      {/* NOTIFICATION MODAL */}
       {showNotification && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-sm w-full p-6">
@@ -725,7 +695,7 @@ function Inventory() {
             <p className="text-gray-700">{notificationMessage}</p>
             <button
               onClick={closeNotification}
-              className={`mt-4 w-full px-6 py-2 rounded-lg text-white ${
+              className={`mt-4 w-full px-6 py-2 rounded-lg text-white font-medium ${
                 notificationType === 'success' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'
               }`}
             >

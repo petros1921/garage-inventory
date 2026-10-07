@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import api from '../services/api';
-import { Search, Wrench, X, Edit, Save, Plus, ShoppingCart } from 'lucide-react';
+import { Search, Wrench, X, Edit, Save, Plus, ShoppingCart, DollarSign } from 'lucide-react';
+import ImageUpload from '../components/ImageUpload';
+import EthiopianDate from '../components/EthiopianDate';
 
 function WorkOrders() {
   const [user, setUser] = useState(null);
@@ -16,6 +18,9 @@ function WorkOrders() {
     status: '',
     diagnosis_notes: '',
     work_price: 0,
+    machine_cost: 0,
+    received_image_url: null,
+    delivered_image_url: null,
   });
   const [savingEdit, setSavingEdit] = useState(false);
   const [notification, setNotification] = useState(null);
@@ -28,7 +33,7 @@ function WorkOrders() {
   const [partCart, setPartCart] = useState([]);
 
   // --- Helpers ---
-  const getComputedPrices = (workOrder, cart, workPrice) => {
+  const getComputedPrices = (workOrder, cart, workPrice, machineCost) => {
     const existingParts = workOrder?.work_order_parts || [];
     const allParts = [
       ...existingParts.map(p => ({
@@ -41,7 +46,7 @@ function WorkOrders() {
       })),
     ];
     const partPrice = allParts.reduce((sum, item) => sum + (item.selling_price * item.quantity), 0);
-    const total = (workPrice || 0) + partPrice;
+    const total = (workPrice || 0) + (machineCost || 0) + partPrice;
     return { part_price: partPrice, total_price: total };
   };
 
@@ -50,7 +55,6 @@ function WorkOrders() {
     setLoading(true);
     try {
       const res = await api.get('/work-orders/with-parts');
-      console.log('Fetched work orders:', res.data.workOrders);
       setWorkOrders(res.data.workOrders || []);
     } catch (err) {
       console.error(err);
@@ -62,7 +66,6 @@ function WorkOrders() {
 
   useEffect(() => {
     const u = JSON.parse(localStorage.getItem('user'));
-    console.log('Logged in user:', u);
     setUser(u);
     fetchWorkOrders();
   }, []);
@@ -149,15 +152,23 @@ function WorkOrders() {
     if (!selectedWorkOrder) return;
     setSavingEdit(true);
     try {
-      const { part_price, total_price } = getComputedPrices(selectedWorkOrder, partCart, editData.work_price);
+      const { part_price, total_price } = getComputedPrices(
+        selectedWorkOrder,
+        partCart,
+        editData.work_price,
+        editData.machine_cost
+      );
 
       await api.put(`/work-orders/${selectedWorkOrder.id}`, {
         assigned_technician: editData.assigned_technician,
         status: editData.status,
         diagnosis_notes: editData.diagnosis_notes,
         work_price: parseFloat(editData.work_price) || 0,
+        machine_price: parseFloat(editData.machine_cost) || 0,
         part_price: part_price,
         total_price: total_price,
+        received_image_url: editData.received_image_url,
+        delivered_image_url: editData.delivered_image_url,
       });
 
       if (partCart.length > 0) {
@@ -180,7 +191,7 @@ function WorkOrders() {
     }
   };
 
-  // --- Status handlers ---
+  // --- Status handlers (unchanged) ---
   const handleCompleteAndSend = async (wo) => {
     if (!window.confirm('Complete this work order and send to Cashier?')) return;
     try {
@@ -258,6 +269,9 @@ function WorkOrders() {
       status: wo.status || 'pending_diagnosis',
       diagnosis_notes: wo.diagnosis_notes || '',
       work_price: wo.work_price || 0,
+      machine_cost: wo.machine_price || wo.machine_cost || 0,
+      received_image_url: wo.received_image_url || null,
+      delivered_image_url: wo.delivered_image_url || null,
     });
     setPartCart([]);
     setIsEditing(true);
@@ -286,7 +300,6 @@ function WorkOrders() {
     return classes[status] || 'bg-gray-100 text-gray-600';
   };
 
-  // --- Filtering ---
   const filteredOrders = workOrders.filter(wo => {
     const matchesSearch =
       wo.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -297,7 +310,7 @@ function WorkOrders() {
     return matchesSearch && matchesStatus;
   });
 
-  // --- Render ---
+  // ============ RENDER ============
   return (
     <div className="p-4 max-w-7xl mx-auto">
       <h1 className="text-2xl font-bold flex items-center gap-2 mb-4">
@@ -378,7 +391,7 @@ function WorkOrders() {
                       {wo.status}
                     </span>
                   </td>
-                  <td className="px-4 py-2">${wo.total_price || 0}</td>
+                  <td className="px-4 py-2 font-semibold">ETB {parseFloat(wo.total_price || 0).toFixed(2)}</td>
                   <td className="px-4 py-2">
                     {wo.status === 'pending_diagnosis' && user?.role === 'frontdesk' && (
                       <button
@@ -452,7 +465,7 @@ function WorkOrders() {
               </div>
             </div>
 
-            {/* View Mode */}
+            {/* ============ VIEW MODE ============ */}
             {!isEditing ? (
               <>
                 <div className="space-y-2 text-sm">
@@ -463,23 +476,92 @@ function WorkOrders() {
                   <p><strong>Technician:</strong> {selectedWorkOrder.assigned_technician || '-'}</p>
                   <p><strong>Status:</strong> <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadge(selectedWorkOrder.status)}`}>{selectedWorkOrder.status}</span></p>
                   <p><strong>Diagnosis:</strong> {selectedWorkOrder.diagnosis_notes || '-'}</p>
-                  <p><strong>Work Price:</strong> ${selectedWorkOrder.work_price}</p>
-                  <p><strong>Part Price:</strong> ${selectedWorkOrder.part_price}</p>
-                  <p><strong>Total:</strong> ${selectedWorkOrder.total_price}</p>
-                  <p><strong>FS#:</strong> {selectedWorkOrder.fs_number || 'Not set'}</p>
+                  <p className="flex items-center gap-2">
+                    <strong>Created:</strong>
+                    <EthiopianDate date={selectedWorkOrder.created_at} includeTime />
+                  </p>
+                  {selectedWorkOrder.paid_at && (
+                    <p className="flex items-center gap-2">
+                      <strong>Paid:</strong>
+                      <EthiopianDate date={selectedWorkOrder.paid_at} includeTime />
+                    </p>
+                  )}
                 </div>
 
-                <h3 className="font-semibold mt-4 mb-2">Parts in Order</h3>
+                {/* Photos */}
+                {(selectedWorkOrder.received_image_url || selectedWorkOrder.delivered_image_url) && (
+                  <div className="mt-4">
+                    <h3 className="font-semibold mb-2 text-sm">📷 Photos</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      {selectedWorkOrder.received_image_url && (
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">📥 Received from customer</p>
+                          <a href={selectedWorkOrder.received_image_url} target="_blank" rel="noopener noreferrer">
+                            <img
+                              src={selectedWorkOrder.received_image_url}
+                              alt="Received"
+                              className="w-full h-40 object-cover rounded-lg border hover:opacity-90 transition"
+                            />
+                          </a>
+                        </div>
+                      )}
+                      {selectedWorkOrder.delivered_image_url && (
+                        <div>
+                          <p className="text-xs text-gray-500 mb-1">📤 Delivered to customer</p>
+                          <a href={selectedWorkOrder.delivered_image_url} target="_blank" rel="noopener noreferrer">
+                            <img
+                              src={selectedWorkOrder.delivered_image_url}
+                              alt="Delivered"
+                              className="w-full h-40 object-cover rounded-lg border hover:opacity-90 transition"
+                            />
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Pricing Breakdown */}
+                <div className="mt-4">
+                  <h3 className="font-semibold mb-2 text-sm">💰 Pricing Breakdown</h3>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-1.5 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Work Price (Labor)</span>
+                      <span className="font-medium">ETB {parseFloat(selectedWorkOrder.work_price || 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Machine Cost</span>
+                      <span className="font-medium">ETB {parseFloat(selectedWorkOrder.machine_price || 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Parts Price</span>
+                      <span className="font-medium">ETB {parseFloat(selectedWorkOrder.part_price || 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between border-t pt-1.5">
+                      <span className="font-bold text-blue-800">Grand Total</span>
+                      <span className="font-bold text-blue-800">
+                        ETB {parseFloat(selectedWorkOrder.total_price || 0).toFixed(2)}
+                      </span>
+                    </div>
+                    {selectedWorkOrder.vat_applied && (
+                      <div className="flex justify-between text-blue-700 pt-1 border-t">
+                        <span>VAT 15% included</span>
+                        <span>ETB {parseFloat(selectedWorkOrder.vat_amount || 0).toFixed(2)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <h3 className="font-semibold mt-4 mb-2 text-sm">🔧 Parts in Order</h3>
                 <div className="space-y-1 max-h-40 overflow-y-auto border rounded-lg p-2">
                   {selectedWorkOrder.work_order_parts?.length > 0 ? (
                     selectedWorkOrder.work_order_parts.map(wp => {
-                      // ✅ FIX: fallback to part.selling_price if wp.selling_price is missing
                       const price = wp.selling_price ?? wp.part?.selling_price ?? 0;
                       return (
                         <div key={wp.id} className="flex justify-between border-b py-1 text-sm">
                           <span>{wp.part?.item_name} ({wp.part?.item_code})</span>
                           <span>Qty: {wp.quantity}</span>
-                          <span>Price: ${price}</span>
+                          <span>ETB {price}</span>
                         </div>
                       );
                     })
@@ -493,9 +575,7 @@ function WorkOrders() {
                     <button
                       onClick={() => {
                         const notes = prompt('Enter diagnosis notes:', selectedWorkOrder.diagnosis_notes || '');
-                        if (notes !== null) {
-                          handleAddDiagnosis(selectedWorkOrder.id, notes);
-                        }
+                        if (notes !== null) handleAddDiagnosis(selectedWorkOrder.id, notes);
                       }}
                       className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-1.5 rounded-lg text-sm"
                     >
@@ -512,18 +592,8 @@ function WorkOrders() {
                   )}
                   {selectedWorkOrder.status === 'pending_manager' && user?.role === 'manager' && (
                     <>
-                      <button
-                        onClick={() => handleApprove(selectedWorkOrder.id)}
-                        className="bg-green-500 hover:bg-green-600 text-white px-4 py-1.5 rounded-lg text-sm"
-                      >
-                        Approve
-                      </button>
-                      <button
-                        onClick={() => handleDeny(selectedWorkOrder.id)}
-                        className="bg-red-500 hover:bg-red-600 text-white px-4 py-1.5 rounded-lg text-sm"
-                      >
-                        Deny
-                      </button>
+                      <button onClick={() => handleApprove(selectedWorkOrder.id)} className="bg-green-500 hover:bg-green-600 text-white px-4 py-1.5 rounded-lg text-sm">Approve</button>
+                      <button onClick={() => handleDeny(selectedWorkOrder.id)} className="bg-red-500 hover:bg-red-600 text-white px-4 py-1.5 rounded-lg text-sm">Deny</button>
                     </>
                   )}
                   {selectedWorkOrder.status === 'pending_storekeeper' && user?.role === 'storekeeper' && (
@@ -559,14 +629,14 @@ function WorkOrders() {
                 </div>
               </>
             ) : (
-              /* === EDIT MODE === */
+              /* ============ EDIT MODE ============ */
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium">Technician</label>
                   <input
                     type="text"
                     value={editData.assigned_technician}
-                    onChange={(e) => setEditData({...editData, assigned_technician: e.target.value})}
+                    onChange={(e) => setEditData({ ...editData, assigned_technician: e.target.value })}
                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                   />
                 </div>
@@ -574,7 +644,7 @@ function WorkOrders() {
                   <label className="block text-sm font-medium">Status</label>
                   <select
                     value={editData.status}
-                    onChange={(e) => setEditData({...editData, status: e.target.value})}
+                    onChange={(e) => setEditData({ ...editData, status: e.target.value })}
                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                   >
                     <option value="pending_diagnosis">Pending Diagnosis</option>
@@ -593,34 +663,56 @@ function WorkOrders() {
                   <label className="block text-sm font-medium">Diagnosis Notes</label>
                   <textarea
                     value={editData.diagnosis_notes}
-                    onChange={(e) => setEditData({...editData, diagnosis_notes: e.target.value})}
+                    onChange={(e) => setEditData({ ...editData, diagnosis_notes: e.target.value })}
                     className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none"
                     rows="3"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium">Work Price ($)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={editData.work_price}
-                    onChange={(e) => {
-                      setEditData(prev => ({ ...prev, work_price: parseFloat(e.target.value) || 0 }));
-                    }}
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
+
+                {/* Pricing row */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium flex items-center gap-1">
+                      <DollarSign size={14} /> Work Price (ETB)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={editData.work_price}
+                      onChange={(e) => setEditData(prev => ({ ...prev, work_price: parseFloat(e.target.value) || 0 }))}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium flex items-center gap-1">
+                      <DollarSign size={14} /> Machine Cost (ETB)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={editData.machine_cost}
+                      onChange={(e) => setEditData(prev => ({ ...prev, machine_cost: parseFloat(e.target.value) || 0 }))}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                    <p className="text-[10px] text-gray-400 mt-0.5">Cost for using garage machines</p>
+                  </div>
                 </div>
 
                 {(() => {
-                  const { part_price, total_price } = getComputedPrices(selectedWorkOrder, partCart, editData.work_price);
+                  const { part_price, total_price } = getComputedPrices(
+                    selectedWorkOrder,
+                    partCart,
+                    editData.work_price,
+                    editData.machine_cost
+                  );
                   return (
-                    <>
+                    <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="block text-sm font-medium">Part Price (auto)</label>
                         <input
                           type="number"
-                          step="0.01"
                           value={part_price}
                           disabled
                           className="w-full px-3 py-2 border rounded-lg bg-gray-100 cursor-not-allowed"
@@ -630,23 +722,40 @@ function WorkOrders() {
                         <label className="block text-sm font-medium">Total Price (auto)</label>
                         <input
                           type="number"
-                          step="0.01"
                           value={total_price}
                           disabled
                           className="w-full px-3 py-2 border rounded-lg bg-gray-100 cursor-not-allowed"
                         />
                       </div>
-                    </>
+                    </div>
                   );
                 })()}
 
-                {/* Show existing parts with fallback price */}
+                {/* ===== Photos Section ===== */}
+                <div className="border-t pt-4">
+                  <h4 className="font-medium text-sm mb-3">📷 Photos</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <ImageUpload
+                      value={editData.received_image_url}
+                      onChange={(url) => setEditData({ ...editData, received_image_url: url })}
+                      label="Part Received from Customer"
+                      folder="work-orders/received"
+                    />
+                    <ImageUpload
+                      value={editData.delivered_image_url}
+                      onChange={(url) => setEditData({ ...editData, delivered_image_url: url })}
+                      label="Part Delivered to Customer"
+                      folder="work-orders/delivered"
+                    />
+                  </div>
+                </div>
+
+                {/* Existing parts */}
                 {selectedWorkOrder.work_order_parts?.length > 0 && (
                   <div className="border-t pt-4">
                     <h4 className="font-medium text-sm mb-2">Current Parts in Order</h4>
                     <div className="space-y-2 max-h-40 overflow-y-auto border rounded-lg p-2">
                       {selectedWorkOrder.work_order_parts.map(wp => {
-                        // ✅ FIX: fallback to part.selling_price if wp.selling_price is missing
                         const price = wp.selling_price ?? wp.part?.selling_price ?? 0;
                         return (
                           <div key={wp.id} className="flex justify-between items-center border-b pb-1">
@@ -655,7 +764,7 @@ function WorkOrders() {
                               <span className="text-sm text-gray-500 ml-2">({wp.part?.item_code})</span>
                               <span className="text-sm text-gray-500 ml-2">Qty: {wp.quantity}</span>
                             </div>
-                            <div className="text-sm font-medium">${price}</div>
+                            <div className="text-sm font-medium">ETB {price}</div>
                           </div>
                         );
                       })}
@@ -687,7 +796,7 @@ function WorkOrders() {
                               <div className="font-semibold">{p.item_name}</div>
                               <div className="text-sm text-gray-500">{p.car_brand} {p.car_model}</div>
                               <div className="text-sm">
-                                Qty: {p.quantity} | Price: ${p.selling_price}
+                                Qty: {p.quantity} | Price: ETB {p.selling_price}
                                 {p.quantity === 0 && <span className="text-red-500 ml-2">(Out of stock)</span>}
                                 {!p.is_selling_price_set && <span className="text-yellow-500 ml-2">(Price not set)</span>}
                               </div>
@@ -718,7 +827,7 @@ function WorkOrders() {
                           <div key={p.part_id} className="flex justify-between items-center border-b pb-1">
                             <div>
                               <span className="font-medium">{p.item_name}</span>
-                              <span className="text-sm text-gray-500 ml-2">${p.selling_price}</span>
+                              <span className="text-sm text-gray-500 ml-2">ETB {p.selling_price}</span>
                               <div className="text-xs text-gray-400">{p.item_code}</div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -731,7 +840,7 @@ function WorkOrders() {
                         ))}
                       </div>
                       <div className="mt-2 text-sm font-medium">
-                        Total New Part Price: ${partCart.reduce((sum, p) => sum + (p.selling_price * p.quantity), 0).toFixed(2)}
+                        Total New Part Price: ETB {partCart.reduce((sum, p) => sum + (p.selling_price * p.quantity), 0).toFixed(2)}
                       </div>
                     </div>
                   )}
@@ -745,10 +854,7 @@ function WorkOrders() {
                   >
                     <Save size={16} className="inline mr-1" /> {savingEdit ? 'Saving...' : 'Save Changes'}
                   </button>
-                  <button
-                    onClick={cancelEditing}
-                    className="bg-gray-200 hover:bg-gray-300 px-6 py-2 rounded-lg"
-                  >
+                  <button onClick={cancelEditing} className="bg-gray-200 hover:bg-gray-300 px-6 py-2 rounded-lg">
                     Cancel
                   </button>
                 </div>
