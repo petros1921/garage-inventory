@@ -1,7 +1,7 @@
 import axios from 'axios';
 
-// Uses Vercel env var in production, localhost in development
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+// Uses Vercel env var in production, falls back to Render backend
+const API_URL = import.meta.env.VITE_API_URL || 'https://garage-inventory-backend.onrender.com/api';
 
 console.log('🚀 API baseURL =', API_URL);
 
