@@ -130,7 +130,7 @@ function Navbar({ user, setUser, collapsed, setCollapsed }) {
           <div className="bg-blue-600 rounded-lg p-1">
             <Wrench className="text-white" size={16} />
           </div>
-          <span className="font-bold text-gray-800 text-sm">Mekbeb Dynamo</span>
+          <span className="font-bold text-gray-800 text-sm">Mekbib Dynamo</span>
         </div>
       </div>
 
@@ -160,8 +160,8 @@ function Navbar({ user, setUser, collapsed, setCollapsed }) {
             </div>
             {!collapsed && (
               <div className="flex flex-col leading-tight min-w-0">
-                <span className="font-bold text-gray-800 truncate">Mekbeb Denamo</span>
-                <span className="text-[10px] text-gray-400 truncate">መክበብ ዲናሞ</span>
+                <span className="font-bold text-gray-800 truncate">Mekbib Dynamo</span>
+                <span className="text-[10px] text-gray-400 truncate">መክብብ ዲናሞ</span>
               </div>
             )}
           </div>

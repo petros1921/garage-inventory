@@ -59,12 +59,14 @@ function Login({ setUser }) {
             <div className="bg-blue-600 w-16 h-16 rounded-xl flex items-center justify-center mx-auto mb-4">
               <Wrench className="text-white" size={30} />
             </div>
-            <h1 className="text-2xl font-bold text-white">Mekbeb Denamo</h1>
+            <h1 className="text-xl sm:text-2xl font-bold text-white leading-tight">
+              Mekbib Dynamo <br className="hidden sm:block" />
+            </h1>
             <p
-              className="text-slate-400 text-sm mt-1"
+              className="text-slate-400 text-sm mt-2"
               style={{ fontFamily: "'Noto Sans Ethiopic', sans-serif" }}
             >
-              መክበብ ዲናሞ
+              መክብብ ዲናሞ
             </p>
           </div>
 
@@ -138,7 +140,7 @@ function Login({ setUser }) {
 
         {/* Footer */}
         <p className="text-center text-xs text-slate-500 mt-6">
-          © {new Date().getFullYear()} Mekbeb Denamo. All rights reserved.
+          © {new Date().getFullYear()} Mekbib Dynamo. All rights reserved.
         </p>
       </div>
     </div>
